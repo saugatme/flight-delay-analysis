@@ -1,0 +1,29 @@
+[project]
+name = "flight-delay-analysis"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Saugat Bhattarai", email = "saugatme@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "kaleido>=1,<2",
+    "pandas>=2.2,<3",
+    "plotly>=6,<7",
+    "pyarrow>=17,<23",
+    "pyspark>=4,<5",
+]
+
+[project.scripts]
+flight-delay-analysis = "flight_delay_analysis:main"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "ruff>=0.16.10",
+]
