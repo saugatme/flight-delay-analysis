@@ -14,3 +14,11 @@
 - Initialized a packaged uv project with a `src/` layout.
 - Added PySpark, pandas, PyArrow, Plotly, and Kaleido.
 - Added pytest and Ruff as development tools.
+
+## 2026-10-10 — Spark setup check
+
+- Started PySpark 4.2.0 in local mode with Java 17.
+- Created and displayed a one-row Spark DataFrame.
+- Confirmed that Python, Java, and PySpark work together in WSL.
+- Confirmed that Ruff passes.
+- Observed normal WSL and native Hadoop startup warnings.
