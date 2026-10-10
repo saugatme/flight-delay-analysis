@@ -28,12 +28,21 @@ Completed configuration work:
 
 - `config/pipeline.yml` defines the run partition, local source pattern, HDFS layers, quality expectations, delay threshold, and MongoDB endpoint.
 - PyYAML is installed through uv.
-- The YAML file parses successfully.
+- The tested loader returns immutable typed settings and rejects invalid values and unsafe paths.
+
+Completed Bronze ingestion work:
+
+- The source resolver requires exactly one configured monthly CSV.
+- The ingestion manifest records the source name, byte size, SHA-256 checksum, row count, UTC ingestion time, and HDFS URI.
+- The Hadoop CLI adapter uses argument lists and does not invoke a shell.
+- The ingestion uses temporary HDFS names and atomic renames.
+- A safe rerun is accepted, and a conflicting source is rejected.
+- The unchanged January CSV and its manifest are stored in HDFS Bronze.
+- Ruff and all 34 automated tests pass.
 
 ## Important limits
 
 - HDFS is pseudo-distributed on one computer. It is not a multi-computer cluster.
-- The raw BTS CSV is not in HDFS Bronze yet.
 - The validated Parquet data is not in HDFS Silver yet.
 - MongoDB is not installed.
 - No Gold result table or dashboard is complete.
@@ -55,18 +64,19 @@ Do not format the NameNode again.
 
 ## Next milestone
 
-Implement configuration-driven Bronze ingestion.
+Refactor `build_parquet.py` into a configuration-driven Silver pipeline.
 
-The ingestion command must:
+The Silver command must:
 
-1. Load and validate `config/pipeline.yml`.
-2. Resolve exactly one CSV for the selected year and month.
-3. Copy the unchanged file into the correct HDFS Bronze partition.
-4. Write an ingestion manifest with file name, size, checksum, row count, and ingestion timestamp.
-5. Detect a safe rerun and reject a conflicting source file.
-6. Include unit tests for configuration and path rules.
+1. Read the source from the configured HDFS Bronze partition.
+2. Confirm 110 source columns and all 28 required fields.
+3. Apply the tested types, key rules, and flag rules.
+4. Separate accepted and rejected rows without hiding conversion failures.
+5. Record quality counts and denominator rules.
+6. Write Parquet to HDFS Silver with year and month partitions.
+7. Read the output back and verify the written counts.
 
-After Bronze works, refactor `build_parquet.py` to read HDFS Bronze and write partitioned HDFS Silver.
+Do not extend the untracked local-CSV analysis prototype.
 
 ## Safety rules
 
