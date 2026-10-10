@@ -1,0 +1,557 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.3cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{fancyhdr}
+
+\definecolor{codebg}{RGB}{246,248,250}
+\definecolor{codeframe}{RGB}{208,215,222}
+\definecolor{linkblue}{RGB}{9,105,218}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=linkblue,
+  urlcolor=linkblue,
+  pdftitle={Flight Delay Pipeline Learning Checkpoint},
+  pdfauthor={Flight Delay Analysis Project}
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  aboveskip=0.8em,
+  belowskip=0.8em
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Flight Delay Analysis}
+\rhead{Learning Checkpoint}
+\cfoot{\thepage}
+\setlength{\headheight}{14pt}
+
+\title{Flight Delay Pipeline\\Learning Checkpoint}
+\author{ID2221 Project}
+\date{10 October 2026}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Purpose of this document}
+
+This document records the project state at the HDFS checkpoint. It explains what was done, why each decision was made, what each command result means, and what work remains.
+
+The document is a learning record. It is not only an installation log. A later reader must be able to understand the pipeline without access to the original terminal session.
+
+\section{Proposal requirements}
+
+The approved proposal defines these main tools:
+
+\begin{itemize}[leftmargin=*]
+  \item HDFS stores raw flight data.
+  \item PySpark and Spark SQL clean, join, aggregate, and analyse the data.
+  \item MongoDB stores processed results for queries.
+  \item Plotly Dash presents charts, filters, route maps, and airport maps.
+  \item OpenFlights supplies airport and route reference data for coordinates.
+\end{itemize}
+
+The proposal also includes multiple years, seasonal trends, route performance, airport connectivity, and a composite delay score.
+
+An early project plan used only local files and local Parquet. That plan was useful for the first development checks, but it did not include the required HDFS and MongoDB stages. The target architecture was therefore corrected before the analysis work continued.
+
+\section{Target architecture}
+
+The target data flow is:
+
+\begin{lstlisting}
+BTS monthly CSV files
+        |
+        v
+HDFS Bronze: unchanged source files, partitioned by year and month
+        |
+        v
+PySpark: schema checks, type conversion, cleaning, and joins
+        |
+        v
+HDFS Silver: validated Parquet records
+        |
+        v
+Spark SQL: carrier, month, airport, route, and network summaries
+        |
+        v
+Gold results -> MongoDB collections -> Plotly Dash
+\end{lstlisting}
+
+\subsection{Why use layers?}
+
+Each layer has one clear purpose:
+
+\begin{description}[leftmargin=3.2cm,style=nextline]
+  \item[Landing] Holds downloaded files before HDFS ingestion.
+  \item[Bronze] Preserves the source data. It supports replay and audit work.
+  \item[Silver] Holds typed and validated records in an efficient format.
+  \item[Gold] Holds subject-area summaries for reporting and serving.
+  \item[MongoDB] Serves Gold results to the dashboard with indexed queries.
+\end{description}
+
+This separation makes failures easier to find. For example, a source-file problem belongs to Bronze ingestion. A type or null problem belongs to Silver processing. A wrong business denominator belongs to Gold aggregation.
+
+\section{Development environment}
+
+The project runs on Windows through WSL 2 and Ubuntu 24.04.4 LTS.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Component & Confirmed value \\
+\midrule
+Operating environment & WSL 2 with Ubuntu 24.04.4 LTS \\
+Architecture & x86\_64 \\
+Python manager & uv 0.12.23 \\
+Python & 3.12.15 \\
+Java & OpenJDK 17.0.20.1 \\
+PySpark & 4.2.0 \\
+Hadoop & 3.5.0 \\
+Repository & \texttt{/home/saugat/projects/flight-delay-analysis} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Why WSL?}
+
+Hadoop and Spark are designed for Linux environments. WSL lets the project use Linux tools while the user keeps Windows as the desktop system.
+
+The repository is stored in the WSL Linux filesystem. It is not stored in OneDrive or under \texttt{/mnt/c}. This choice avoids Windows line-ending problems, Linux permission problems, and slow cross-filesystem access.
+
+An alternative was to run native Windows Hadoop. That option was not selected because the existing Windows Hadoop copy produced incompatible shell-script line endings in WSL.
+
+\section{Source-data checkpoint}
+
+The first development partition is the BTS January 2025 On-Time Performance file.
+
+The inspection script reported:
+
+\begin{lstlisting}
+Rows: 539,747
+Source columns: 110
+Missing required columns: []
+\end{lstlisting}
+
+\subsection{What these results mean}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{539,747 rows} means the file has the expected number of flight records for this project checkpoint.
+  \item \textbf{110 source columns} means the file shape matches the expected BTS export.
+  \item \textbf{No missing required columns} means all 28 selected fields are available.
+\end{itemize}
+
+These checks do not prove that every value is correct. They only confirm the file identity and required field names. Silver processing must still check dates, numbers, flags, null values, business keys, and invalid records.
+
+\section{Initial local Parquet prototype}
+
+Before HDFS was added, the project built a local CSV-to-Parquet prototype.
+
+The prototype:
+
+\begin{itemize}[leftmargin=*]
+  \item read source fields as strings;
+  \item selected 28 required fields;
+  \item converted dates, integers, doubles, and Boolean flags;
+  \item rejected missing business keys;
+  \item rejected invalid cancellation and diversion flags;
+  \item wrote 539,747 typed Parquet rows;
+  \item read the Parquet output back and confirmed the row count;
+  \item added five automated tests.
+\end{itemize}
+
+The equal input and output row counts show that the initial conversion did not remove records. They do not prove that all optional values are valid. The prototype remains useful, but its local output is not the final Silver layer. The final Silver layer must be written to HDFS.
+
+\section{Why a separate Linux Hadoop installation was required}
+
+The first \texttt{hdfs} command resolved to:
+
+\begin{lstlisting}
+/mnt/c/hadoop/bin/hdfs
+\end{lstlisting}
+
+It failed with:
+
+\begin{lstlisting}
+/usr/bin/env: 'bash\r': No such file or directory
+\end{lstlisting}
+
+The \texttt{\textbackslash r} character is the carriage-return part of Windows CRLF line endings. The Linux shell expected LF line endings. This output proved that WSL was trying to run a Windows-formatted Hadoop shell script.
+
+The safe choice was a separate Linux Hadoop installation under:
+
+\begin{lstlisting}
+/home/saugat/opt/hadoop-3.5.0
+\end{lstlisting}
+
+The Windows copy was not edited or deleted.
+
+\section{Hadoop installation and Java}
+
+Apache Hadoop 3.5.0 was selected because it is a stable release with full Java 17 support. The archive checksum was checked before extraction. This check reduces the risk of using a damaged or changed download.
+
+The first version command failed with:
+
+\begin{lstlisting}
+ERROR: JAVA_HOME is not set and could not be found.
+\end{lstlisting}
+
+Java was installed, but Hadoop did not know the Java installation root. The Java executable was:
+
+\begin{lstlisting}
+/usr/lib/jvm/java-17-openjdk-amd64/bin/java
+\end{lstlisting}
+
+Therefore, \texttt{JAVA\_HOME} was set to the directory before \texttt{/bin/java}:
+
+\begin{lstlisting}
+/usr/lib/jvm/java-17-openjdk-amd64
+\end{lstlisting}
+
+The shell configuration now defines:
+
+\begin{lstlisting}
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export HADOOP_HOME="$HOME/opt/hadoop-3.5.0"
+export HADOOP_CONF_DIR="$HADOOP_HOME/etc/hadoop"
+export PATH="$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$PATH"
+\end{lstlisting}
+
+The Linux Hadoop directories come before the old Windows directory in \texttt{PATH}. A shell uses the first matching command that it finds. This order makes \texttt{hdfs} resolve to the Linux installation.
+
+The successful version output showed Hadoop 3.5.0, Linux x86\_64, and the Hadoop JAR path under \texttt{/home/saugat/opt}. This result proved that the correct Hadoop distribution could load Java.
+
+\section{HDFS configuration}
+
+\subsection{Core address}
+
+The \texttt{core-site.xml} file defines:
+
+\begin{lstlisting}[language=XML]
+<configuration>
+    <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://localhost:9000</value>
+    </property>
+</configuration>
+\end{lstlisting}
+
+The value \texttt{hdfs://localhost:9000} is the HDFS client address. Spark will use this address to read and write HDFS data.
+
+\subsection{Storage and replication}
+
+The \texttt{hdfs-site.xml} file defines:
+
+\begin{lstlisting}[language=XML]
+<configuration>
+    <property>
+        <name>dfs.replication</name>
+        <value>1</value>
+    </property>
+    <property>
+        <name>dfs.namenode.name.dir</name>
+        <value>file:///home/saugat/hadoop-data/namenode</value>
+    </property>
+    <property>
+        <name>dfs.datanode.data.dir</name>
+        <value>file:///home/saugat/hadoop-data/datanode</value>
+    </property>
+</configuration>
+\end{lstlisting}
+
+Replication is one because the current environment has one DataNode. A replication factor above one cannot create independent copies when only one DataNode exists.
+
+The NameNode directory stores filesystem metadata. The DataNode directory stores data blocks. These directories are outside the Git repository because HDFS owns their contents.
+
+\section{XML errors and their meaning}
+
+Two configuration errors occurred.
+
+\subsection{Second XML declaration}
+
+The first error said:
+
+\begin{lstlisting}
+Illegal processing instruction target ("xml")
+at row 19 in core-site.xml
+\end{lstlisting}
+
+The file contained a second \texttt{<?xml ...?>} declaration. An XML declaration is valid only at the start of a document. Removing the duplicate declaration fixed the file.
+
+\subsection{Missing root start tag}
+
+The second error said:
+
+\begin{lstlisting}
+Illegal to have multiple roots
+at row 24 in hdfs-site.xml
+\end{lstlisting}
+
+An earlier line deletion removed the opening \texttt{<configuration>} tag. Restoring that tag produced one valid root element.
+
+The final checks returned:
+
+\begin{lstlisting}
+hdfs://localhost:9000
+1
+file:///home/saugat/hadoop-data/namenode
+file:///home/saugat/hadoop-data/datanode
+\end{lstlisting}
+
+These values prove that Hadoop can parse both XML files and retrieve the intended settings.
+
+\section{Why SSH was required}
+
+The Hadoop start script uses SSH to start daemons, including daemons on localhost.
+
+The first SSH test returned:
+
+\begin{lstlisting}
+ssh: connect to host localhost port 22: Connection refused
+\end{lstlisting}
+
+The SSH client existed, but the SSH server was not installed or active. The OpenSSH server was installed and enabled. Password-free localhost access was then configured with an Ed25519 key.
+
+The final SSH command returned exit code zero. Exit code zero means that the connection succeeded and the remote \texttt{true} command completed without an error.
+
+The private key must stay private. Only the public key belongs in \texttt{authorized\_keys}.
+
+\section{NameNode format}
+
+The new NameNode storage directory was empty. The one-time format command created the HDFS namespace and initial filesystem image.
+
+The output included an image file with transaction ID zero and a normal shutdown message. This result means that the initial metadata image was written successfully. The shutdown message was expected because the temporary format process exits after initialization.
+
+\textbf{Important:} do not format the NameNode again after data is stored in HDFS. A new format can create a different filesystem namespace and make existing DataNode blocks unusable.
+
+\section{HDFS startup result}
+
+The start script reported:
+
+\begin{lstlisting}
+Starting namenodes on [localhost]
+Starting datanodes
+Starting secondary namenodes [Saugat]
+\end{lstlisting}
+
+The Java process list showed:
+
+\begin{lstlisting}
+NameNode
+DataNode
+SecondaryNameNode
+Jps
+\end{lstlisting}
+
+\begin{description}[leftmargin=3.6cm,style=nextline]
+  \item[NameNode] Maintains directory names, file names, permissions, and block locations.
+  \item[DataNode] Stores and serves HDFS data blocks.
+  \item[SecondaryNameNode] Merges filesystem images and edit logs at checkpoints. It is not a standby NameNode.
+  \item[Jps] Lists Java processes. It is a diagnostic command, not an HDFS service.
+\end{description}
+
+The HDFS report showed one live DataNode, zero missing blocks, zero corrupt replicas, and about 901 GB of remaining capacity. This means the DataNode registered with the NameNode and the empty HDFS filesystem is healthy.
+
+\section{HDFS ports}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lllX@{}}
+\toprule
+Port & Protocol & User & Purpose \\
+\midrule
+9000 & Hadoop IPC & Spark and HDFS clients & Read and write HDFS data. \\
+9870 & HTTP & Web browser & View NameNode status and filesystem information. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Opening port 9000 in a browser produced this message:
+
+\begin{lstlisting}
+It looks like you are making an HTTP request to a Hadoop IPC port.
+\end{lstlisting}
+
+This message did not mean that HDFS was broken. It meant that the browser used HTTP on a non-HTTP port. The correct browser address is \url{http://localhost:9870}.
+
+\section{HDFS layer directories}
+
+The following directories now exist:
+
+\begin{lstlisting}
+/flight-delay/bronze/bts/year=2025/month=01
+/flight-delay/silver/flights
+/flight-delay/gold
+\end{lstlisting}
+
+The \texttt{year=2025/month=01} names use the standard partition-key form. Spark can use these directory names as partition columns when it reads compatible file layouts.
+
+The directories are empty at this checkpoint. The source CSV was not uploaded manually. A controlled ingestion command will perform that action and record a manifest.
+
+\section{Shared YAML configuration}
+
+The project now has \texttt{config/pipeline.yml}. It contains the run partition, local source pattern, HDFS layer names, expected source size, delay threshold, and MongoDB endpoint.
+
+\begin{lstlisting}
+project:
+  name: flight-delay-analysis
+
+run:
+  year: 2025
+  month: 1
+
+source:
+  format: csv
+  local_root: data/raw
+  file_pattern: "*.csv"
+
+hdfs:
+  base_uri: hdfs://localhost:9000/flight-delay
+  bronze_dataset: bronze/bts
+  silver_dataset: silver/flights
+  gold_dataset: gold
+
+quality:
+  expected_rows: 539747
+  expected_source_columns: 110
+  delay_threshold_minutes: 15
+
+mongodb:
+  host: localhost
+  port: 27017
+  database: flight_delay
+\end{lstlisting}
+
+Python scripts will read this file. They will not contain fixed input and output paths. A single configuration source reduces inconsistent values between ingestion, validation, aggregation, and serving stages.
+
+An alternative is to pass every setting as a command-line argument. That method is flexible, but it is easy to create long commands with inconsistent values. YAML is clearer for this student pipeline.
+
+Credentials do not belong in YAML. Future MongoDB credentials must come from environment variables or another ignored secret store.
+
+\section{Data-quality rules}
+
+The pipeline must record data-quality evidence at each stage.
+
+\begin{itemize}[leftmargin=*]
+  \item Record the source file name, byte size, checksum, row count, and ingestion time.
+  \item Confirm all required columns before transformation.
+  \item Record input, accepted, and rejected row counts.
+  \item Keep cancelled and diverted flights separate from completed flights.
+  \item Do not replace a missing arrival delay with zero.
+  \item Treat a delay as significant when it is at least 15 minutes.
+  \item State the denominator for every rate.
+  \item Record unmatched airport codes after the OpenFlights join.
+\end{itemize}
+
+For a delay rate, the denominator is the number of applicable arrival flights. For a cancellation rate, the denominator is the number of scheduled flights. These are different populations and must not be mixed.
+
+\section{Current limitations}
+
+\begin{itemize}[leftmargin=*]
+  \item HDFS is pseudo-distributed on one computer. It is not a multi-computer cluster.
+  \item Spark has only been confirmed in local mode. Distributed Spark execution is not yet documented.
+  \item The current source has one month. Seasonal and cross-year comparisons are not yet possible.
+  \item The existing Parquet file is local, not in HDFS Silver.
+  \item MongoDB is not installed.
+  \item Gold tables and the dashboard do not exist.
+  \item HDFS does not use Kerberos. The services must remain local and must not be exposed to a public network.
+\end{itemize}
+
+\section{Completed checklist}
+
+\begin{itemize}[leftmargin=*]
+  \item[Complete:] Environment setup, source download, and source inspection.
+  \item[Complete:] Initial typed Parquet prototype and five tests.
+  \item[Complete:] Native Hadoop installation and Java configuration.
+  \item[Complete:] Localhost SSH and pseudo-distributed HDFS.
+  \item[Complete:] HDFS health check and layer directories.
+  \item[Complete:] Shared YAML configuration.
+\end{itemize}
+
+\section{Remaining checklist}
+
+\begin{enumerate}[leftmargin=*]
+  \item Implement and test the configuration loader.
+  \item Implement idempotent Bronze ingestion and an ingestion manifest.
+  \item Copy the January CSV into HDFS Bronze through the pipeline.
+  \item Refactor validation to read Bronze and write partitioned Silver Parquet.
+  \item Add rejected-record outputs and quality metrics.
+  \item Add and validate OpenFlights reference data.
+  \item Build Gold summaries with Spark SQL and DataFrame operations.
+  \item Install MongoDB and load Gold collections.
+  \item Create indexes and verify collection counts.
+  \item Build Plotly Dash views and maps.
+  \item Add more years and run seasonal and cross-year analysis.
+  \item Complete the final report, tests, and reproducibility guide.
+\end{enumerate}
+
+\section{Exact next milestone}
+
+The next milestone is configuration-driven Bronze ingestion.
+
+The command must:
+
+\begin{enumerate}[leftmargin=*]
+  \item load and validate \texttt{config/pipeline.yml};
+  \item construct the local source directory from the year and month;
+  \item require exactly one matching CSV file;
+  \item calculate a checksum before ingestion;
+  \item copy the unchanged file to the correct HDFS Bronze partition;
+  \item write an ingestion manifest;
+  \item detect a safe rerun;
+  \item reject a different file at the same target;
+  \item include tests for configuration, path construction, and file selection.
+\end{enumerate}
+
+Gold analysis must wait until Bronze and Silver work end to end from HDFS.
+
+\section{Short glossary}
+
+\begin{longtable}{@{}p{0.25\textwidth}p{0.69\textwidth}@{}}
+\toprule
+Term & Meaning \\
+\midrule
+\endhead
+HDFS & Hadoop Distributed File System. It stores files as blocks and separates filesystem metadata from data-block storage. \\
+NameNode & The HDFS metadata service. \\
+DataNode & The HDFS block-storage service. \\
+SecondaryNameNode & A checkpoint service that merges images and edit logs. It is not an automatic standby NameNode. \\
+Pseudo-distributed & Separate Hadoop daemon processes on one computer. \\
+Partition & A directory-based division of data, such as year and month. \\
+Bronze & Unchanged source data with ingestion metadata. \\
+Silver & Cleaned, typed, and validated detailed data. \\
+Gold & Aggregated business results. \\
+Idempotent & Safe to run again without producing an unintended duplicate or conflicting result. \\
+Manifest & A record of the ingested file, checksum, size, counts, and time. \\
+Denominator & The population used below the division line in a calculated rate. \\
+\bottomrule
+\end{longtable}
+
+\section{Checkpoint conclusion}
+
+The project now has a working HDFS foundation that matches the proposal. The key infrastructure result is one healthy pseudo-distributed HDFS instance with a clear Bronze, Silver, and Gold layout. The key design result is one shared YAML configuration for all future pipeline stages.
+
+The project is not yet an end-to-end data pipeline. The next proof point is a tested Bronze ingestion command that moves the unchanged BTS source file into HDFS and records evidence about that ingestion.
+
+\end{document}
