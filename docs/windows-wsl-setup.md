@@ -232,6 +232,30 @@ cd ~/projects/flight-delay-analysis
 uv sync --all-groups
 ```
 
+Run the quality checks:
+
+```bash
+uv run ruff check .
+uv run pytest
+```
+
+Run or safely rerun Bronze ingestion:
+
+```bash
+uv run python -m flight_delay_analysis.ingest_bronze \
+  --config config/pipeline.yml \
+  --project-root .
+```
+
+The command reads the configured local landing path. It does not contain a fixed monthly filename. The first run uploads the unchanged source and its manifest. A later run with the same file reports `already_ingested`. A conflicting file stops the command.
+
+Inspect the Bronze partition:
+
+```bash
+hdfs dfs -ls -h /flight-delay/bronze/bts/year=2025/month=01
+hdfs dfs -cat /flight-delay/bronze/bts/year=2025/month=01/_ingestion_manifest.json
+```
+
 Stop HDFS when required:
 
 ```bash
@@ -277,3 +301,15 @@ Action: check the file with line numbers. Keep one XML declaration and one `conf
 Cause: the browser opened port 9000.
 
 Action: use port 9870 for the NameNode web interface.
+
+### HDFS reports `Connection refused` on port 9000
+
+Cause: the NameNode is not running or did not start correctly.
+
+Action: run `start-dfs.sh`, check `jps`, and run `hdfs dfsadmin -report`. Do not format the NameNode again.
+
+### HDFS `-ls` rejects `-la`
+
+Cause: HDFS shell options are not identical to Linux `ls` options.
+
+Action: use `hdfs dfs -ls -h PATH`. HDFS already prints a detailed listing.

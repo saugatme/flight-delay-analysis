@@ -2,6 +2,24 @@
 
 Checkpoint date: 2026-10-10
 
+## Progress count
+
+- Overall project: **37/62 checklist items complete (60%)**.
+- Current Bronze ingestion section: **8/8 engineering steps complete (100%)**.
+- The overall items are broad milestones and are not all the same size.
+- Update both counters when a milestone is completed.
+
+### Bronze ingestion section
+
+- [x] Load and validate the shared YAML configuration.
+- [x] Resolve exactly one monthly source CSV without a hardcoded filename.
+- [x] Calculate source size, SHA-256 checksum, row count, and manifest content.
+- [x] Add the HDFS write interface.
+- [x] Copy the unchanged source CSV into its Bronze partition.
+- [x] Write the ingestion manifest into the Bronze partition.
+- [x] Accept a safe rerun and reject a conflicting source.
+- [x] Run and verify the complete ingestion against HDFS.
+
 ## Completed
 
 ### Project environment
@@ -54,10 +72,10 @@ Checkpoint date: 2026-10-10
 
 ## Next
 
-- [ ] Add a tested configuration loader.
-- [ ] Add idempotent Bronze ingestion.
-- [ ] Write a Bronze ingestion manifest.
-- [ ] Copy the January CSV into HDFS Bronze through the pipeline.
+- [x] Add a tested configuration loader.
+- [x] Add idempotent Bronze ingestion.
+- [x] Write a Bronze ingestion manifest.
+- [x] Copy the January CSV into HDFS Bronze through the pipeline.
 - [ ] Refactor the validation step to read HDFS Bronze.
 - [ ] Write validated Parquet into partitioned HDFS Silver.
 - [ ] Add rejected-record and quality-metric outputs.
@@ -100,4 +118,4 @@ Checkpoint date: 2026-10-10
 
 ## Current stop point
 
-HDFS and YAML configuration work are complete. The next code task is Bronze ingestion. Do not start Gold analysis yet.
+HDFS Bronze ingestion is complete. The unchanged January CSV and its manifest are stored in HDFS. The next code task is the configuration-driven HDFS Bronze-to-Silver pipeline. Do not start Gold analysis yet.

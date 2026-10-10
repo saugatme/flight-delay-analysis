@@ -47,9 +47,9 @@ Local landing CSV
 - [x] Start and verify HDFS daemons.
 - [x] Create Bronze, Silver, and Gold HDFS directories.
 - [x] Add shared YAML configuration.
-- [ ] Add a configuration loader with validation.
-- [ ] Add idempotent Bronze ingestion and an ingestion manifest.
-- [ ] Add Bronze ingestion tests.
+- [x] Add a configuration loader with validation.
+- [x] Add idempotent Bronze ingestion and an ingestion manifest.
+- [x] Add Bronze ingestion tests.
 
 ## Stage 3 - Silver data
 
@@ -102,4 +102,4 @@ For delay rates, divide delayed flights by applicable flights. Exclude cancelled
 
 ## Current milestone
 
-The HDFS foundation and shared YAML file are complete. The next milestone is configuration-driven Bronze ingestion. No production data is in HDFS yet.
+The HDFS foundation and Bronze ingestion milestone are complete. The unchanged January CSV and its manifest are in HDFS Bronze. The next milestone is configuration-driven Silver processing from HDFS Bronze to partitioned HDFS Parquet.

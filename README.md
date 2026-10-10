@@ -27,10 +27,15 @@ Completed:
 - Confirmed one live DataNode and zero missing or corrupt blocks.
 - Created the Bronze, Silver, and Gold directory structure in HDFS.
 - Added `config/pipeline.yml` and PyYAML.
+- Added a typed and validated YAML configuration loader.
+- Added configuration-driven Bronze ingestion with no fixed source filename.
+- Stored the unchanged January CSV in HDFS Bronze.
+- Stored a JSON ingestion manifest with the file identity and ingestion evidence.
+- Added safe-rerun and conflicting-source checks.
+- Confirmed that all 34 automated tests and Ruff checks pass.
 
 Not complete:
 
-- The raw CSV is not in HDFS Bronze yet.
 - The validated Parquet data is not in HDFS Silver yet.
 - MongoDB is not installed or connected.
 - Gold summary tables are not implemented.
@@ -75,9 +80,18 @@ The local CSV and local Parquet files are temporary development inputs. The comp
 
 ```text
 /flight-delay/bronze/bts/year=2025/month=01
+  On_Time_Reporting_Carrier_On_Time_Performance_(1987_present)_2025_1.csv
+  _ingestion_manifest.json
 /flight-delay/silver/flights
 /flight-delay/gold
 ```
+
+The Bronze source is unchanged and has these recorded facts:
+
+- rows: 539,747;
+- size: 243,177,378 bytes;
+- SHA-256: `d7c7d59452cad1215d9605e8ff350a4bad7282750765084fe57928a5ad275453`;
+- ingestion time: `2026-10-10T20:21:41.877634Z`.
 
 HDFS uses these local service endpoints:
 
@@ -189,19 +203,27 @@ uv run python src/flight_delay_analysis/inspect_raw.py
 uv run python src/flight_delay_analysis/build_parquet.py
 ```
 
-These checks still validate the pre-HDFS development pipeline. They will change when Bronze and Silver ingestion is implemented.
+Run or safely rerun Bronze ingestion:
+
+```bash
+uv run python -m flight_delay_analysis.ingest_bronze \
+  --config config/pipeline.yml \
+  --project-root .
+```
+
+The first successful run reports `ingested`. A later run with the same source reports `already_ingested`. A source conflict stops with an error instead of replacing Bronze data.
 
 ## Next milestone
 
-Implement a configuration loader and a Bronze ingestion command. The command must:
+Refactor the Silver pipeline so Spark reads the configured HDFS Bronze CSV instead of the local landing file. The Silver step must:
 
-1. Read `config/pipeline.yml`.
-2. Resolve one local source file for the selected year and month.
-3. Reject zero files or more than one matching file.
-4. Copy the unchanged CSV into its HDFS Bronze partition.
-5. Add an ingestion manifest with the source name, size, checksum, row count, and ingestion time.
-6. Be safe to rerun without silently replacing a different source file.
-7. Include tests for path construction and file-selection rules.
+1. Read the Bronze file from HDFS.
+2. Confirm the 110-column source shape and all 28 required fields.
+3. Apply explicit data types and documented null rules.
+4. separate accepted and rejected records;
+5. record input, accepted, rejected, cancelled, and diverted counts;
+6. write partitioned Parquet to HDFS Silver;
+7. verify counts after the write.
 
 Do not implement Gold analysis before Bronze and Silver work from HDFS.
 

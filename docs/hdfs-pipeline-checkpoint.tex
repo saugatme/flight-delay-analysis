@@ -57,7 +57,7 @@
 
 \section{Purpose of this document}
 
-This document records the project state at the HDFS checkpoint. It explains what was done, why each decision was made, what each command result means, and what work remains.
+This document records the project state at the HDFS and Bronze-ingestion checkpoint. It explains what was done, why each decision was made, what each command result means, and what work remains.
 
 The document is a learning record. It is not only an installation log. A later reader must be able to understand the pipeline without access to the original terminal session.
 
@@ -407,7 +407,7 @@ The following directories now exist:
 
 The \texttt{year=2025/month=01} names use the standard partition-key form. Spark can use these directory names as partition columns when it reads compatible file layouts.
 
-The directories are empty at this checkpoint. The source CSV was not uploaded manually. A controlled ingestion command will perform that action and record a manifest.
+The January 2025 partition now contains the unchanged source CSV and its ingestion manifest. The source was not uploaded with an ad hoc manual copy. The tested pipeline command performed the upload and recorded the source identity.
 
 \section{Shared YAML configuration}
 
@@ -449,6 +449,86 @@ An alternative is to pass every setting as a command-line argument. That method 
 
 Credentials do not belong in YAML. Future MongoDB credentials must come from environment variables or another ignored secret store.
 
+\section{Configuration-driven Bronze ingestion}
+
+Bronze ingestion is now complete for the January 2025 partition. The command is:
+
+\begin{lstlisting}
+uv run python -m flight_delay_analysis.ingest_bronze \
+  --config config/pipeline.yml \
+  --project-root .
+\end{lstlisting}
+
+The command does not contain the long BTS filename. It reads the local root, file pattern, year, and month from the YAML configuration.
+
+\subsection{Configuration validation}
+
+The loader converts each YAML section into an immutable typed object. It stops before ingestion when it finds a missing section, an invalid month, an unsupported source format, an unsafe parent path, a malformed HDFS URI, a non-positive quality value, or an invalid MongoDB port.
+
+This early stop is important. A wrong value such as month 13 must not create a wrong HDFS partition. An alternative is to use raw Python dictionaries in every script. That option was not selected because each script could then interpret the same setting differently.
+
+\subsection{Source resolution}
+
+The resolver builds this local directory from configuration:
+
+\begin{lstlisting}
+data/raw/2025-01
+\end{lstlisting}
+
+It applies the configured \texttt{*.csv} pattern and requires exactly one regular file. Zero matches mean that the input is missing. More than one match is ambiguous, so the command stops instead of selecting the first file.
+
+\subsection{Manifest and source identity}
+
+The pipeline reads the full source before upload. It counts CSV data records, measures the byte size, and calculates SHA-256 in chunks. Chunked hashing avoids loading the 243 MB file into memory at one time.
+
+The stored manifest is:
+
+\begin{lstlisting}
+{
+  "hdfs_file_uri": "hdfs://localhost:9000/flight-delay/bronze/bts/year=2025/month=01/On_Time_Reporting_Carrier_On_Time_Performance_(1987_present)_2025_1.csv",
+  "ingested_at_utc": "2026-10-10T20:21:41.877634Z",
+  "row_count": 539747,
+  "sha256": "d7c7d59452cad1215d9605e8ff350a4bad7282750765084fe57928a5ad275453",
+  "size_bytes": 243177378,
+  "source_file_name": "On_Time_Reporting_Carrier_On_Time_Performance_(1987_present)_2025_1.csv"
+}
+\end{lstlisting}
+
+The row count matches the configured expectation. The checksum identifies the exact file content. The byte size provides a second simple integrity fact. The UTC timestamp records when the pipeline accepted the file. It does not change the source identity.
+
+\subsection{HDFS adapter and connection error}
+
+The Python HDFS adapter sends argument lists to the installed \texttt{hdfs dfs} client. It does not build shell command strings. This design keeps the source filename, including its spaces and parentheses, as one command argument.
+
+During the first live check, the adapter reported that the partition did not exist. A direct HDFS command then reported \texttt{Connection refused}. Hadoop can return exit code one for both a missing path and some connection failures. The adapter was corrected to treat a silent exit code one as a missing path and an exit code with error text as an HDFS failure.
+
+After \texttt{start-dfs.sh}, the partition check returned \texttt{True}. This result proved that the NameNode RPC service was available on port 9000 and that the adapter could reach the configured partition.
+
+\subsection{Atomic staging and safe reruns}
+
+The command first uploads the CSV and manifest under temporary names that end in \texttt{.uploading}. It then uses HDFS rename operations to publish the final names. Rename is atomic in one HDFS namespace. Readers therefore do not see a partly uploaded final file.
+
+On a rerun, the command reads the stored manifest and compares the filename, byte size, checksum, row count, and HDFS URI. It ignores the new attempt timestamp. The same source returns \texttt{already\_ingested}. A different source at the same partition stops with an error. The pipeline does not silently replace Bronze data.
+
+\subsection{Final HDFS result}
+
+The first successful command reported:
+
+\begin{lstlisting}
+Bronze ingestion status: ingested
+\end{lstlisting}
+
+The HDFS listing reported two items:
+
+\begin{lstlisting}
+231.9 M  ... On_Time_Reporting_Carrier_On_Time_Performance_(1987_present)_2025_1.csv
+441      ... _ingestion_manifest.json
+\end{lstlisting}
+
+The 231.9 MiB display is the human-readable form of 243,177,378 bytes. The two-item result means that the partition has one source file and one manifest. No duplicate or final staging file is present.
+
+Ruff and all 34 automated tests passed. The tests cover the local type-conversion prototype, YAML validation, source selection, manifest generation, HDFS command construction, first ingestion, safe rerun, conflicting source, and unexpected row count.
+
 \section{Data-quality rules}
 
 The pipeline must record data-quality evidence at each stage.
@@ -487,14 +567,15 @@ For a delay rate, the denominator is the number of applicable arrival flights. F
   \item[Complete:] Localhost SSH and pseudo-distributed HDFS.
   \item[Complete:] HDFS health check and layer directories.
   \item[Complete:] Shared YAML configuration.
+  \item[Complete:] Typed configuration loader and source resolution.
+  \item[Complete:] Idempotent Bronze ingestion and ingestion manifest.
+  \item[Complete:] January 2025 unchanged source in HDFS Bronze.
+  \item[Complete:] Ruff and 34 automated tests.
 \end{itemize}
 
 \section{Remaining checklist}
 
 \begin{enumerate}[leftmargin=*]
-  \item Implement and test the configuration loader.
-  \item Implement idempotent Bronze ingestion and an ingestion manifest.
-  \item Copy the January CSV into HDFS Bronze through the pipeline.
   \item Refactor validation to read Bronze and write partitioned Silver Parquet.
   \item Add rejected-record outputs and quality metrics.
   \item Add and validate OpenFlights reference data.
@@ -508,20 +589,20 @@ For a delay rate, the denominator is the number of applicable arrival flights. F
 
 \section{Exact next milestone}
 
-The next milestone is configuration-driven Bronze ingestion.
+The next milestone is configuration-driven Silver processing.
 
 The command must:
 
 \begin{enumerate}[leftmargin=*]
-  \item load and validate \texttt{config/pipeline.yml};
-  \item construct the local source directory from the year and month;
-  \item require exactly one matching CSV file;
-  \item calculate a checksum before ingestion;
-  \item copy the unchanged file to the correct HDFS Bronze partition;
-  \item write an ingestion manifest;
-  \item detect a safe rerun;
-  \item reject a different file at the same target;
-  \item include tests for configuration, path construction, and file selection.
+  \item load the shared configuration;
+  \item read the source from HDFS Bronze with Spark;
+  \item confirm the 110-column source shape and all 28 required fields;
+  \item apply explicit types and documented null rules;
+  \item separate accepted and rejected rows;
+  \item record input, accepted, rejected, cancelled, and diverted counts;
+  \item write year and month partitions as Parquet in HDFS Silver;
+  \item read the output back and verify the counts;
+  \item include tests for conversion failures and rejected records.
 \end{enumerate}
 
 Gold analysis must wait until Bronze and Silver work end to end from HDFS.
@@ -550,8 +631,8 @@ Denominator & The population used below the division line in a calculated rate. 
 
 \section{Checkpoint conclusion}
 
-The project now has a working HDFS foundation that matches the proposal. The key infrastructure result is one healthy pseudo-distributed HDFS instance with a clear Bronze, Silver, and Gold layout. The key design result is one shared YAML configuration for all future pipeline stages.
+The project now has a working HDFS foundation and a complete first Bronze ingestion that match the proposal. The infrastructure result is one healthy pseudo-distributed HDFS instance with a clear Bronze, Silver, and Gold layout. The data-engineering result is one configuration-driven, tested, and repeatable ingestion path with file-identity evidence.
 
-The project is not yet an end-to-end data pipeline. The next proof point is a tested Bronze ingestion command that moves the unchanged BTS source file into HDFS and records evidence about that ingestion.
+The project is not yet an end-to-end data pipeline. The next proof point is a tested Silver command that reads Bronze through HDFS, makes data-quality decisions explicit, and writes validated Parquet back to HDFS.
 
 \end{document}

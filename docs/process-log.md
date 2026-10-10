@@ -101,12 +101,42 @@ Resolved configuration errors:
 
 Result meaning: the storage contract exists, and future Python code can avoid fixed input and output paths.
 
+## 2026-10-10 - Configuration-driven Bronze ingestion
+
+- Added a typed loader for `config/pipeline.yml`.
+- Added early checks for missing sections, invalid months, unsupported formats, unsafe relative paths, malformed HDFS URIs, non-positive quality values, and invalid MongoDB ports.
+- Resolved the monthly source from the configured root, year, month, and file pattern.
+- Required exactly one regular source file. Zero files and multiple files stop the run.
+- Added an HDFS adapter for existence checks, directory creation, file upload, text upload, reads, and atomic rename operations.
+- Fixed an adapter error that first treated a refused NameNode connection as a missing HDFS path.
+- Calculated the SHA-256 checksum in chunks instead of loading the full CSV into memory.
+- Counted CSV records with the Python CSV parser and excluded the header.
+- Staged the CSV and manifest under temporary HDFS names before atomic renames.
+- Added safe-rerun handling and conflicting-source rejection.
+- Added configuration, source-resolution, manifest, HDFS-adapter, ingestion, and rerun tests.
+- Confirmed that Ruff and all 34 automated tests pass.
+
+The final manifest recorded:
+
+| Field | Result |
+| --- | --- |
+| Source file | `On_Time_Reporting_Carrier_On_Time_Performance_(1987_present)_2025_1.csv` |
+| Rows | 539,747 |
+| Size | 243,177,378 bytes |
+| SHA-256 | `d7c7d59452cad1215d9605e8ff350a4bad7282750765084fe57928a5ad275453` |
+| Ingested at | `2026-10-10T20:21:41.877634Z` |
+| HDFS partition | `/flight-delay/bronze/bts/year=2025/month=01` |
+
+The HDFS listing showed two final files: the 231.9 MiB source CSV and the 441-byte manifest. It showed no final duplicate. The source is an unchanged Bronze copy. The manifest supplies lineage and file-identity evidence.
+
+The NameNode web page uses port 9870. HDFS clients use the IPC endpoint on port 9000. A browser must not use port 9000.
+
 ## Current stop point
 
-- HDFS is running and empty except for the directory structure.
-- The BTS CSV has not been copied into HDFS Bronze.
+- HDFS Bronze contains the unchanged January 2025 BTS CSV and its ingestion manifest.
+- Configuration-driven ingestion and safe-rerun rules are complete.
 - The existing typed Parquet data remains local.
 - MongoDB is not installed.
 - No Gold table or dashboard is complete.
 
-Next action: implement and test the configuration loader and Bronze ingestion command. Do not start Gold analysis before the HDFS Bronze-to-Silver path works.
+Next action: refactor the validation pipeline to read HDFS Bronze, record accepted and rejected rows, and write partitioned Parquet to HDFS Silver. Do not start Gold analysis before the HDFS Bronze-to-Silver path works.
