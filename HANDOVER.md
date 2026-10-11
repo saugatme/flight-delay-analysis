@@ -38,12 +38,24 @@ Completed Bronze ingestion work:
 - The ingestion uses temporary HDFS names and atomic renames.
 - A safe rerun is accepted, and a conflicting source is rejected.
 - The unchanged January CSV and its manifest are stored in HDFS Bronze.
-- Ruff and all 34 automated tests pass.
+- Ruff and all 52 automated tests pass.
+
+Completed Silver processing work:
+
+- Spark reads the exact Bronze source URI recorded in the ingestion manifest.
+- The source contract requires 110 source columns and all 28 required fields.
+- Row classification keeps valid rows as typed data and invalid rows as raw strings with explicit rejection reasons.
+- Empty optional delay fields are allowed. Non-empty invalid numeric values are rejected.
+- The January run accepted all 539,747 rows and rejected zero rows.
+- The quality record reports 16,312 cancelled rows and 1,166 diverted rows.
+- Accepted Parquet, rejected-record Parquet, and JSON quality metrics are stored in separate HDFS datasets.
+- Spark read the accepted Parquet back as 539,747 rows and 28 columns, including `year` and `month` partition columns.
+- The Silver rerun reports `already_written` for the same Bronze checksum.
+- `hdfs fsck /flight-delay/silver -files -blocks` reports a healthy filesystem.
 
 ## Important limits
 
 - HDFS is pseudo-distributed on one computer. It is not a multi-computer cluster.
-- The validated Parquet data is not in HDFS Silver yet.
 - MongoDB is not installed.
 - No Gold result table or dashboard is complete.
 - A local untracked prototype named `analyze_carrier_delays.py` reads local CSV and does not fit the target pipeline. It is not part of the committed project. Replace it later instead of extending it.
@@ -64,19 +76,19 @@ Do not format the NameNode again.
 
 ## Next milestone
 
-Refactor `build_parquet.py` into a configuration-driven Silver pipeline.
+Build the OpenFlights airport reference-data pipeline.
 
-The Silver command must:
+The reference pipeline must:
 
-1. Read the source from the configured HDFS Bronze partition.
-2. Confirm 110 source columns and all 28 required fields.
-3. Apply the tested types, key rules, and flag rules.
-4. Separate accepted and rejected rows without hiding conversion failures.
-5. Record quality counts and denominator rules.
-6. Write Parquet to HDFS Silver with year and month partitions.
-7. Read the output back and verify the written counts.
+1. Record the source, retrieval date or version, and license.
+2. Preserve the unchanged source in HDFS.
+3. Parse airport records with an explicit schema.
+4. Validate IATA codes and coordinate ranges.
+5. Write typed reference Parquet to HDFS.
+6. Join coordinates to origin and destination airport codes.
+7. Record matched and unmatched airport-code counts.
 
-Do not extend the untracked local-CSV analysis prototype.
+Do not start Gold aggregation until the airport join and its quality evidence are complete. Do not extend the untracked local-CSV analysis prototype.
 
 ## Safety rules
 

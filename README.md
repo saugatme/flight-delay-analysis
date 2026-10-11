@@ -32,11 +32,15 @@ Completed:
 - Stored the unchanged January CSV in HDFS Bronze.
 - Stored a JSON ingestion manifest with the file identity and ingestion evidence.
 - Added safe-rerun and conflicting-source checks.
-- Confirmed that all 34 automated tests and Ruff checks pass.
+- Read the manifested Bronze CSV from HDFS with Spark.
+- Enforced the 110-column source shape and 28 required fields.
+- Split valid typed rows from rejected raw rows with explicit reasons.
+- Wrote accepted Parquet, rejected-record Parquet, and JSON quality metrics to HDFS Silver.
+- Verified an idempotent Silver rerun, typed Parquet read-back, and healthy HDFS blocks.
+- Confirmed that all 52 automated tests and Ruff checks pass.
 
 Not complete:
 
-- The validated Parquet data is not in HDFS Silver yet.
 - MongoDB is not installed or connected.
 - Gold summary tables are not implemented.
 - The OpenFlights reference-data join is not implemented.
@@ -82,7 +86,10 @@ The local CSV and local Parquet files are temporary development inputs. The comp
 /flight-delay/bronze/bts/year=2025/month=01
   On_Time_Reporting_Carrier_On_Time_Performance_(1987_present)_2025_1.csv
   _ingestion_manifest.json
-/flight-delay/silver/flights
+/flight-delay/silver/flights/year=2025/month=01
+/flight-delay/silver/rejected_flights/year=2025/month=01
+/flight-delay/silver/quality_metrics/year=2025/month=01
+  quality_metrics.json
 /flight-delay/gold
 ```
 
@@ -92,6 +99,18 @@ The Bronze source is unchanged and has these recorded facts:
 - size: 243,177,378 bytes;
 - SHA-256: `d7c7d59452cad1215d9605e8ff350a4bad7282750765084fe57928a5ad275453`;
 - ingestion time: `2026-10-10T20:21:41.877634Z`.
+
+The Silver quality record contains:
+
+- input rows: 539,747;
+- accepted rows: 539,747;
+- rejected rows: 0;
+- cancelled rows: 16,312;
+- diverted rows: 1,166;
+- source SHA-256: the same value as the Bronze manifest;
+- processing time: `2026-10-11T14:02:58.140670Z`.
+
+Spark read the stored Parquet back as 539,747 rows and 28 columns, including the `year` and `month` partition columns. `FlightDate` is a date, `ArrDelay` is a double, and `Cancelled` is a Boolean.
 
 HDFS uses these local service endpoints:
 
@@ -108,7 +127,7 @@ The configuration defines:
 
 - processing year and month;
 - local landing directory and file pattern;
-- HDFS base URI and layer names;
+- HDFS base URI and Bronze, accepted Silver, rejected Silver, quality, and Gold dataset names;
 - expected source row and column counts;
 - the 15-minute delay threshold;
 - MongoDB host, port, and database name.
@@ -213,17 +232,26 @@ uv run python -m flight_delay_analysis.ingest_bronze \
 
 The first successful run reports `ingested`. A later run with the same source reports `already_ingested`. A source conflict stops with an error instead of replacing Bronze data.
 
+Run or safely rerun Silver processing:
+
+```bash
+uv run python -m flight_delay_analysis.build_silver \
+  --config config/pipeline.yml
+```
+
+The first completed run reports `written`. A later run linked to the same Bronze checksum reports `already_written` without starting a new Spark transformation.
+
 ## Next milestone
 
-Refactor the Silver pipeline so Spark reads the configured HDFS Bronze CSV instead of the local landing file. The Silver step must:
+Build the OpenFlights airport reference-data pipeline. It must:
 
-1. Read the Bronze file from HDFS.
-2. Confirm the 110-column source shape and all 28 required fields.
-3. Apply explicit data types and documented null rules.
-4. separate accepted and rejected records;
-5. record input, accepted, rejected, cancelled, and diverted counts;
-6. write partitioned Parquet to HDFS Silver;
-7. verify counts after the write.
+1. Record the source URL, version or retrieval date, and license.
+2. Preserve the unchanged downloaded source in an HDFS reference Bronze area.
+3. Define an explicit airport schema.
+4. Validate IATA codes, latitude, and longitude.
+5. Write typed reference Parquet to HDFS.
+6. Join airport coordinates to both origin and destination codes.
+7. Record matched and unmatched airport-code counts.
 
 Do not implement Gold analysis before Bronze and Silver work from HDFS.
 

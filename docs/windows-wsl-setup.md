@@ -256,6 +256,29 @@ hdfs dfs -ls -h /flight-delay/bronze/bts/year=2025/month=01
 hdfs dfs -cat /flight-delay/bronze/bts/year=2025/month=01/_ingestion_manifest.json
 ```
 
+Build or safely rerun the Silver partition:
+
+```bash
+uv run python -m flight_delay_analysis.build_silver \
+  --config config/pipeline.yml
+```
+
+The first completed run reports `written`. A later run for the same Bronze checksum reports `already_written`. The command creates:
+
+```text
+/flight-delay/silver/flights/year=2025/month=01
+/flight-delay/silver/rejected_flights/year=2025/month=01
+/flight-delay/silver/quality_metrics/year=2025/month=01/quality_metrics.json
+```
+
+Check the stored quality evidence:
+
+```bash
+hdfs dfs -cat \
+  /flight-delay/silver/quality_metrics/year=2025/month=01/quality_metrics.json
+hdfs fsck /flight-delay/silver -files -blocks
+```
+
 Stop HDFS when required:
 
 ```bash
@@ -313,3 +336,9 @@ Action: run `start-dfs.sh`, check `jps`, and run `hdfs dfsadmin -report`. Do not
 Cause: HDFS shell options are not identical to Linux `ls` options.
 
 Action: use `hdfs dfs -ls -h PATH`. HDFS already prints a detailed listing.
+
+### Silver says that the quality file exists but data is missing
+
+Cause: a Silver data directory was removed after the completed quality record was written.
+
+Action: inspect all three configured Silver paths. Do not manually invent a replacement quality record. Restore or rebuild the exact monthly partition from Bronze after the inconsistency is understood.
