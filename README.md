@@ -37,13 +37,18 @@ Completed:
 - Split valid typed rows from rejected raw rows with explicit reasons.
 - Wrote accepted Parquet, rejected-record Parquet, and JSON quality metrics to HDFS Silver.
 - Verified an idempotent Silver rerun, typed Parquet read-back, and healthy HDFS blocks.
-- Confirmed that all 52 automated tests and Ruff checks pass.
+- Preserved the unchanged OpenFlights airport source and provenance manifest in HDFS Bronze.
+- Parsed all 7,698 reference rows with an explicit 14-field schema.
+- Produced 6,071 typed join-ready airports and 1,627 explained rejected rows.
+- Wrote checksum-versioned airport reference Parquet and quality metrics to HDFS Silver.
+- Left joined airport data to both endpoints without changing the 539,747-flight row count.
+- Recorded 539,516 matches and 231 unmatched rows for each endpoint.
+- Confirmed that all 95 automated tests and Ruff checks pass.
 
 Not complete:
 
 - MongoDB is not installed or connected.
 - Gold summary tables are not implemented.
-- The OpenFlights reference-data join is not implemented.
 - Plotly Dash is not implemented.
 - Multi-year analysis is not implemented.
 
@@ -90,6 +95,14 @@ The local CSV and local Parquet files are temporary development inputs. The comp
 /flight-delay/silver/rejected_flights/year=2025/month=01
 /flight-delay/silver/quality_metrics/year=2025/month=01
   quality_metrics.json
+/flight-delay/bronze/reference/openflights/airports
+  airports.dat
+  _ingestion_manifest.json
+/flight-delay/silver/reference/openflights/airports/source_sha256=<airport-sha256>
+/flight-delay/silver/reference/openflights/rejected_airports/source_sha256=<airport-sha256>
+/flight-delay/silver/reference/openflights/quality_metrics/source_sha256=<airport-sha256>
+/flight-delay/silver/enriched_flights/year=2025/month=01
+  flight_source_sha256=<flight-sha256>/airport_source_sha256=<airport-sha256>
 /flight-delay/gold
 ```
 
@@ -112,6 +125,8 @@ The Silver quality record contains:
 
 Spark read the stored Parquet back as 539,747 rows and 28 columns, including the `year` and `month` partition columns. `FlightDate` is a date, `ArrDelay` is a double, and `Cancelled` is a Boolean.
 
+The OpenFlights reference result contains 6,071 accepted airports and 1,627 rejected rows. The enriched flight Parquet contains 539,747 rows and 38 stored fields. Origin and destination each matched 539,516 rows. Both endpoints matched on 539,285 rows, and 462 rows had at least one unmatched endpoint.
+
 HDFS uses these local service endpoints:
 
 - `hdfs://localhost:9000`: HDFS client and Spark connection.
@@ -128,6 +143,8 @@ The configuration defines:
 - processing year and month;
 - local landing directory and file pattern;
 - HDFS base URI and Bronze, accepted Silver, rejected Silver, quality, and Gold dataset names;
+- OpenFlights source, license, local landing path, and reference HDFS datasets;
+- enriched-flight and join-quality dataset names;
 - expected source row and column counts;
 - the 15-minute delay threshold;
 - MongoDB host, port, and database name.
@@ -146,6 +163,8 @@ Confirmed source result:
 - No required column names missing.
 
 Do not treat cancelled flights as on-time flights. Do not replace a missing arrival delay with zero.
+
+The current reference source is the OpenFlights `airports.dat` file. See [docs/data-sources.md](docs/data-sources.md) for its source, license, attribution, schema, checksum, validation results, and join coverage.
 
 ## Required analysis
 
@@ -241,19 +260,19 @@ uv run python -m flight_delay_analysis.build_silver \
 
 The first completed run reports `written`. A later run linked to the same Bronze checksum reports `already_written` without starting a new Spark transformation.
 
+Run or safely rerun the airport reference and endpoint enrichment:
+
+```bash
+uv run python -m flight_delay_analysis.ingest_reference --config config/pipeline.yml --project-root .
+uv run python -m flight_delay_analysis.build_airport_reference --config config/pipeline.yml
+uv run python -m flight_delay_analysis.build_enriched_flights --config config/pipeline.yml
+```
+
+Each completed rerun reports an `already_*` status and reuses outputs linked to the same source checksums.
+
 ## Next milestone
 
-Build the OpenFlights airport reference-data pipeline. It must:
-
-1. Record the source URL, version or retrieval date, and license.
-2. Preserve the unchanged downloaded source in an HDFS reference Bronze area.
-3. Define an explicit airport schema.
-4. Validate IATA codes, latitude, and longitude.
-5. Write typed reference Parquet to HDFS.
-6. Join airport coordinates to both origin and destination codes.
-7. Record matched and unmatched airport-code counts.
-
-Do not implement Gold analysis before Bronze and Silver work from HDFS.
+Build the first tested Gold table from the checksum-linked enriched Silver dataset: carrier delay and cancellation summary. Define each denominator before aggregation, keep cancelled flights out of arrival-delay averages, and record row-count and rate tests before adding the next Gold table.
 
 ## Documentation
 
