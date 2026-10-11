@@ -19,6 +19,8 @@ def valid_config() -> dict:
             "base_uri": "hdfs://localhost:9000/flight-delay",
             "bronze_dataset": "bronze/bts",
             "silver_dataset": "silver/flights",
+            "silver_rejected_dataset": "silver/rejected_flights",
+            "silver_quality_dataset": "silver/quality_metrics",
             "gold_dataset": "gold",
         },
         "quality": {
@@ -47,6 +49,8 @@ def test_load_pipeline_config_returns_typed_settings(tmp_path: Path) -> None:
     assert config.run.month == 1
     assert config.source.local_root == Path("data/raw")
     assert config.hdfs.bronze_dataset == "bronze/bts"
+    assert config.hdfs.silver_rejected_dataset == "silver/rejected_flights"
+    assert config.hdfs.silver_quality_dataset == "silver/quality_metrics"
     assert config.quality.expected_rows == 539747
     assert config.mongodb.port == 27017
 

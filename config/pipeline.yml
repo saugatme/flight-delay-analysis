@@ -14,6 +14,8 @@ hdfs:
   base_uri: hdfs://localhost:9000/flight-delay
   bronze_dataset: bronze/bts
   silver_dataset: silver/flights
+  silver_rejected_dataset: silver/rejected_flights
+  silver_quality_dataset: silver/quality_metrics
   gold_dataset: gold
 
 quality:

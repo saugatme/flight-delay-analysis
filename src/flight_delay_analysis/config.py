@@ -30,6 +30,8 @@ class HdfsConfig:
     base_uri: str
     bronze_dataset: str
     silver_dataset: str
+    silver_rejected_dataset: str
+    silver_quality_dataset: str
     gold_dataset: str
 
 
@@ -149,6 +151,10 @@ def load_pipeline_config(path: str | Path) -> PipelineConfig:
             base_uri=base_uri,
             bronze_dataset=_dataset_path(hdfs, "bronze_dataset"),
             silver_dataset=_dataset_path(hdfs, "silver_dataset"),
+            silver_rejected_dataset=_dataset_path(
+                hdfs, "silver_rejected_dataset"
+            ),
+            silver_quality_dataset=_dataset_path(hdfs, "silver_quality_dataset"),
             gold_dataset=_dataset_path(hdfs, "gold_dataset"),
         ),
         quality=QualityConfig(
