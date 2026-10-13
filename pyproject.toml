@@ -8,16 +8,27 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "dash>=3,<5",
     "kaleido>=1,<2",
     "pandas>=2.2,<3",
     "plotly>=6,<7",
+    "pymongo>=4,<5",
     "pyarrow>=17,<23",
     "pyspark>=4,<5",
     "pyyaml>=6,<7",
 ]
 
 [project.scripts]
-flight-delay-analysis = "flight_delay_analysis:main"
+flight-delay-ingest-bronze = "flight_delay_analysis.pipelines.ingest_bronze:main"
+flight-delay-ingest-reference = "flight_delay_analysis.pipelines.ingest_reference:main"
+flight-delay-build-silver = "flight_delay_analysis.pipelines.build_silver:main"
+flight-delay-build-airports = "flight_delay_analysis.pipelines.build_airport_reference:main"
+flight-delay-build-enriched = "flight_delay_analysis.pipelines.build_enriched_flights:main"
+flight-delay-build-carrier-gold = "flight_delay_analysis.pipelines.build_carrier_gold:main"
+flight-delay-build-analytics-gold = "flight_delay_analysis.pipelines.build_analytics_gold:main"
+flight-delay-load-mongodb = "flight_delay_analysis.pipelines.load_gold_mongodb:main"
+flight-delay-dashboard = "flight_delay_analysis.pipelines.run_dashboard:main"
+flight-delay-spark-check = "flight_delay_analysis.tools.spark_check:main"
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]
