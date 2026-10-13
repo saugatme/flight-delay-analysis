@@ -20,6 +20,7 @@ from flight_delay_analysis.enrichment import (
     write_enrichment_outputs,
 )
 from flight_delay_analysis.hdfs import HdfsClient
+from flight_delay_analysis.run_options import add_run_arguments, apply_run_arguments
 from flight_delay_analysis.silver import (
     completed_silver_run,
     load_bronze_manifest,
@@ -37,12 +38,13 @@ def parse_args() -> argparse.Namespace:
         default=Path("config/pipeline.yml"),
         help="Path to the shared pipeline YAML file.",
     )
+    add_run_arguments(parser)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    config = load_pipeline_config(args.config)
+    config = apply_run_arguments(load_pipeline_config(args.config), args)
     hdfs = HdfsClient()
 
     flight_manifest = load_bronze_manifest(config, hdfs)
