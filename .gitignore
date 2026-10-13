@@ -23,3 +23,9 @@ derby.log
 .env
 .DS_Store
 Thumbs.db
+
+# Local agent notes and generated submission artifacts.
+AGENTS.md
+HANDOVER.md
+docs/flight-delay-analysis-report.docx
+src/flight_delay_analysis/analyze_carrier_delays.py

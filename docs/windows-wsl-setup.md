@@ -242,7 +242,7 @@ uv run pytest
 Run or safely rerun Bronze ingestion:
 
 ```bash
-uv run python -m flight_delay_analysis.ingest_bronze \
+uv run flight-delay-ingest-bronze \
   --config config/pipeline.yml \
   --project-root .
 ```
@@ -259,7 +259,7 @@ hdfs dfs -cat /flight-delay/bronze/bts/year=2025/month=01/_ingestion_manifest.js
 Build or safely rerun the Silver partition:
 
 ```bash
-uv run python -m flight_delay_analysis.build_silver \
+uv run flight-delay-build-silver \
   --config config/pipeline.yml
 ```
 

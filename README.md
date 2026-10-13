@@ -1,8 +1,8 @@
 # Flight Delay Analysis
 
-This project builds a data pipeline for US domestic flight-delay and flight-network analysis. It follows the approved ID2221 proposal.
+This project builds a data pipeline for US domestic flight-delay and flight-network analysis. It follows the approved ID2221 proposal and includes a verified January 2024 versus January 2025 comparison.
 
-The final pipeline will use:
+The pipeline uses:
 
 - HDFS for raw and cleaned analytical data.
 - PySpark and Spark SQL for validation, transformation, joins, and aggregation.
@@ -43,14 +43,12 @@ Completed:
 - Wrote checksum-versioned airport reference Parquet and quality metrics to HDFS Silver.
 - Left joined airport data to both endpoints without changing the 539,747-flight row count.
 - Recorded 539,516 matches and 231 unmatched rows for each endpoint.
-- Confirmed that all 95 automated tests and Ruff checks pass.
+- Built checksum-linked carrier, month, season, airport, route, cancellation, connectivity, and score tables in HDFS Gold.
+- Loaded every Gold subject table into authenticated MongoDB collections with query indexes.
+- Built a MongoDB-backed Plotly Dash application with analytical filters and a route map.
+- Confirmed that all 115 automated tests and Ruff checks pass.
 
-Not complete:
-
-- MongoDB is not installed or connected.
-- Gold summary tables are not implemented.
-- Plotly Dash is not implemented.
-- Multi-year analysis is not implemented.
+Project checklist: 62 of 62 milestones complete.
 
 See [docs/checkpoint-checklist.md](docs/checkpoint-checklist.md) for the detailed checklist.
 
@@ -72,7 +70,7 @@ HDFS Silver: validated Parquet flight records
 Spark SQL and DataFrame aggregations
         |
         v
-Gold summary tables -> MongoDB -> Plotly Dash
+HDFS Gold summary tables -> authenticated MongoDB -> Plotly Dash
 ```
 
 The local CSV and local Parquet files are temporary development inputs. The completed pipeline will use HDFS as required by the proposal.
@@ -103,7 +101,8 @@ The local CSV and local Parquet files are temporary development inputs. The comp
 /flight-delay/silver/reference/openflights/quality_metrics/source_sha256=<airport-sha256>
 /flight-delay/silver/enriched_flights/year=2025/month=01
   flight_source_sha256=<flight-sha256>/airport_source_sha256=<airport-sha256>
-/flight-delay/gold
+/flight-delay/gold/<subject>/year=2025/month=01
+  flight_source_sha256=<flight-sha256>/airport_source_sha256=<airport-sha256>
 ```
 
 The Bronze source is unchanged and has these recorded facts:
@@ -127,6 +126,10 @@ Spark read the stored Parquet back as 539,747 rows and 28 columns, including the
 
 The OpenFlights reference result contains 6,071 accepted airports and 1,627 rejected rows. The enriched flight Parquet contains 539,747 rows and 38 stored fields. Origin and destination each matched 539,516 rows. Both endpoints matched on 539,285 rows, and 462 rows had at least one unmatched endpoint.
 
+The January 2025 Gold run contains 14 carrier rows, one month row, one season row, 329 airport rows for each airport subject, 5,649 route rows for each route subject, and four cancellation-code rows. The carrier table reconciles 539,747 scheduled flights, 523,435 operated flights, 522,269 arrival results, 98,130 delayed flights, and 16,312 cancellations.
+
+The January 2024 Gold run contains 15 carrier rows, 334 airport rows for each airport subject, 5,666 route rows for each route subject, and three cancellation-code rows. It reconciles 547,271 scheduled flights, 526,882 operated flights, 525,370 arrival results, 126,410 delayed flights, and 20,389 cancellations. MongoDB contains both years and matches each run's Gold quality counts.
+
 HDFS uses these local service endpoints:
 
 - `hdfs://localhost:9000`: HDFS client and Spark connection.
@@ -149,7 +152,7 @@ The configuration defines:
 - the 15-minute delay threshold;
 - MongoDB host, port, and database name.
 
-Credentials must not be stored in this file. Future MongoDB credentials must come from environment variables.
+Credentials are not stored in this file. MongoDB connection strings come from the ignored `.env` file and process environment.
 
 ## Source data
 
@@ -179,7 +182,7 @@ The proposal requires these results:
 - An airport-coordinate join for maps.
 - A Plotly Dash dashboard backed by MongoDB.
 
-The January 2025 file is the first development partition. More years will be added after one end-to-end partition works.
+January 2024 and January 2025 are the verified like-period partitions. Additional months can use the same command options.
 
 ## Repository structure
 
@@ -187,11 +190,17 @@ The January 2025 file is the first development partition. More years will be add
 config/                    Shared pipeline configuration.
 data/raw/                  Local landing files. Ignored by Git.
 data/processed/            Temporary local Parquet files. Ignored by Git.
-docs/                      Plans, learning notes, and setup guides.
+docs/                      Plans, operating guide, report, and handover.
 notebooks/                 Optional exploration notebooks.
 outputs/charts/            Generated charts. Ignored by Git.
 outputs/tables/            Generated local tables. Ignored by Git.
-src/flight_delay_analysis/ Pipeline source code.
+scripts/                   Local MongoDB service and user setup.
+src/flight_delay_analysis/ Shared pipeline modules.
+src/flight_delay_analysis/pipelines/ Executable pipeline and application commands.
+src/flight_delay_analysis/tools/ Read-only inspection and validation commands.
+src/flight_delay_analysis/gold/ Gold transformations, quality, paths, and storage.
+src/flight_delay_analysis/serving/ MongoDB loading and indexes.
+src/flight_delay_analysis/dashboard/ Dash application and figures.
 tests/                     Automated tests.
 ```
 
@@ -235,16 +244,14 @@ Run the existing checks:
 
 ```bash
 uv run ruff check .
-uv run pytest
-uv run python src/flight_delay_analysis/spark_check.py
-uv run python src/flight_delay_analysis/inspect_raw.py
-uv run python src/flight_delay_analysis/build_parquet.py
+uv run pytest -q
+uv run flight-delay-spark-check
 ```
 
 Run or safely rerun Bronze ingestion:
 
 ```bash
-uv run python -m flight_delay_analysis.ingest_bronze \
+uv run flight-delay-ingest-bronze \
   --config config/pipeline.yml \
   --project-root .
 ```
@@ -254,7 +261,7 @@ The first successful run reports `ingested`. A later run with the same source re
 Run or safely rerun Silver processing:
 
 ```bash
-uv run python -m flight_delay_analysis.build_silver \
+uv run flight-delay-build-silver \
   --config config/pipeline.yml
 ```
 
@@ -263,22 +270,46 @@ The first completed run reports `written`. A later run linked to the same Bronze
 Run or safely rerun the airport reference and endpoint enrichment:
 
 ```bash
-uv run python -m flight_delay_analysis.ingest_reference --config config/pipeline.yml --project-root .
-uv run python -m flight_delay_analysis.build_airport_reference --config config/pipeline.yml
-uv run python -m flight_delay_analysis.build_enriched_flights --config config/pipeline.yml
+uv run flight-delay-ingest-reference --config config/pipeline.yml --project-root .
+uv run flight-delay-build-airports --config config/pipeline.yml
+uv run flight-delay-build-enriched --config config/pipeline.yml
 ```
 
 Each completed rerun reports an `already_*` status and reuses outputs linked to the same source checksums.
 
-## Next milestone
+Build or safely rerun all Gold tables:
 
-Build the first tested Gold table from the checksum-linked enriched Silver dataset: carrier delay and cancellation summary. Define each denominator before aggregation, keep cancelled flights out of arrival-delay averages, and record row-count and rate tests before adding the next Gold table.
+```bash
+uv run flight-delay-build-carrier-gold --config config/pipeline.yml
+uv run flight-delay-build-analytics-gold --config config/pipeline.yml
+```
+
+Load Gold into MongoDB and start the dashboard:
+
+```bash
+set -a
+source .env
+set +a
+./scripts/start_local_mongodb.sh
+uv run flight-delay-load-mongodb --config config/pipeline.yml
+uv run flight-delay-dashboard --config config/pipeline.yml
+```
+
+Open `http://127.0.0.1:8050`. See [docs/operations.md](docs/operations.md) for service startup, period overrides, verification, and shutdown.
+
+## Cross-year result
+
+January 2025 had 7,524 fewer scheduled flights than January 2024. The arrival-delay rate fell from 24.06% to 18.79%, a change of minus 5.27 percentage points. The cancellation rate fell from 3.73% to 3.02%, a change of minus 0.70 points. Average arrival delay fell from 10.35 to 3.76 minutes, a change of minus 6.60 minutes.
+
+These results compare the same month in two years. They do not describe full-year change.
 
 ## Documentation
 
-- [Learning checkpoint](docs/hdfs-pipeline-checkpoint.tex)
+- [Operations guide](docs/operations.md)
+- [Historical HDFS learning checkpoint](docs/hdfs-pipeline-checkpoint.tex)
 - [Checkpoint checklist](docs/checkpoint-checklist.md)
 - [Windows and WSL guide](docs/windows-wsl-setup.md)
 - [Project plan](docs/project-plan.md)
 - [Process log](docs/process-log.md)
-- [Session handover](HANDOVER.md)
+
+The generated final report is submitted separately from the source repository.

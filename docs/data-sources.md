@@ -2,7 +2,16 @@
 
 ## BTS On-Time Performance
 
-The first flight partition is the January 2025 BTS On-Time Performance CSV. Its Bronze manifest records the exact filename, byte size, SHA-256 checksum, row count, ingestion time, and HDFS URI.
+The verified flight partitions are the January 2024 and January 2025 BTS On-Time Performance CSV files. Each Bronze manifest records the exact filename, byte size, SHA-256 checksum, row count, ingestion time, and HDFS URI.
+
+Official archive directory: [BTS TranStats PREZIP](https://transtats.bts.gov/PREZIP/)
+
+| Partition | Rows | Columns | Size | SHA-256 |
+| --- | ---: | ---: | ---: | --- |
+| January 2024 | 547,271 | 110 | 246,830,488 bytes | `e92febedf6cd51bd87eca0be2fba3f5c1f383b1da41119db7f1cc1a26c4d3286` |
+| January 2025 | 539,747 | 110 | 243,177,378 bytes | `d7c7d59452cad1215d9605e8ff350a4bad7282750765084fe57928a5ad275453` |
+
+January 2024 and January 2025 are like-period inputs for the cross-year comparison.
 
 Do not edit the local landing file or its HDFS Bronze copy.
 
