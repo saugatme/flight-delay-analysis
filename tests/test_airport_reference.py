@@ -152,7 +152,7 @@ def test_read_reference_bronze_names_fields_and_converts_missing_marker(
         encoding="utf-8",
     )
 
-    airports = read_reference_bronze(spark, str(source), pipeline_config)
+    airports = read_reference_bronze(spark, source.as_uri(), pipeline_config)
     rows = airports.collect()
 
     assert airports.columns == list(OPENFLIGHTS_COLUMNS)

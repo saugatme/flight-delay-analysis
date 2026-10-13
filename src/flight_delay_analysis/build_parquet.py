@@ -5,11 +5,6 @@ from pathlib import Path
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from flight_delay_analysis.contracts import (
-    REQUIRED_COLUMNS,
-)
-from flight_delay_analysis.transforms import cast_columns
-
 INPUT_PATH = Path(
     "data/raw/2025-01/"
     "On_Time_Reporting_Carrier_On_Time_Performance_"
@@ -18,6 +13,60 @@ INPUT_PATH = Path(
 OUTPUT_PATH = Path("data/processed/2025-01/flights.parquet")
 EXPECTED_ROWS = 539_747
 EXPECTED_SOURCE_COLUMNS = 110
+
+REQUIRED_COLUMNS = (
+    "Year",
+    "Month",
+    "DayofMonth",
+    "DayOfWeek",
+    "FlightDate",
+    "Reporting_Airline",
+    "DOT_ID_Reporting_Airline",
+    "Flight_Number_Reporting_Airline",
+    "OriginAirportID",
+    "Origin",
+    "OriginCityName",
+    "OriginState",
+    "DestAirportID",
+    "Dest",
+    "DestCityName",
+    "DestState",
+    "CRSDepTime",
+    "DepTimeBlk",
+    "DepDelay",
+    "DepDel15",
+    "ArrDelay",
+    "ArrDelayMinutes",
+    "ArrDel15",
+    "Cancelled",
+    "CancellationCode",
+    "Diverted",
+    "Flights",
+    "Distance",
+)
+
+INTEGER_COLUMNS = (
+    "Year",
+    "Month",
+    "DayofMonth",
+    "DayOfWeek",
+    "DOT_ID_Reporting_Airline",
+    "Flight_Number_Reporting_Airline",
+    "OriginAirportID",
+    "DestAirportID",
+)
+DOUBLE_COLUMNS = (
+    "DepDelay",
+    "DepDel15",
+    "ArrDelay",
+    "ArrDelayMinutes",
+    "ArrDel15",
+    "Flights",
+    "Distance",
+)
+FLAG_COLUMNS = ("Cancelled", "Diverted")
+KEY_COLUMNS = ("FlightDate", "Reporting_Airline", "Origin", "Dest")
+
 
 def validate_source(
     flights: DataFrame,
@@ -41,6 +90,28 @@ def validate_source(
     row_count = flights.count()
     if row_count != expected_rows:
         raise ValueError(f"Expected {expected_rows:,} rows, found {row_count:,}")
+
+
+def cast_columns(flights: DataFrame) -> DataFrame:
+    """Select required fields and apply stable types for later analysis."""
+    typed_flights = flights.select(*REQUIRED_COLUMNS).withColumn(
+        "FlightDate", F.to_date("FlightDate", "yyyy-MM-dd")
+    )
+
+    for column in INTEGER_COLUMNS:
+        typed_flights = typed_flights.withColumn(column, F.col(column).cast("int"))
+    for column in DOUBLE_COLUMNS:
+        typed_flights = typed_flights.withColumn(column, F.col(column).cast("double"))
+    for column in FLAG_COLUMNS:
+        numeric_flag = F.expr(f"try_cast(`{column}` AS DOUBLE)")
+        typed_flights = typed_flights.withColumn(
+            column,
+            F.when(numeric_flag.isin(0.0, 1.0), numeric_flag == F.lit(1.0)).otherwise(
+                F.lit(None).cast("boolean")
+            ),
+        )
+
+    return typed_flights
 
 
 def validate_typed_data(flights: DataFrame) -> None:
