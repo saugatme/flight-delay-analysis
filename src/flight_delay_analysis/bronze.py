@@ -161,7 +161,10 @@ def ingest_bronze(
     """Copy one unchanged monthly source and its manifest into HDFS Bronze."""
     source_file = resolve_source_file(config, project_root)
     candidate = create_manifest(source_file, config)
-    if candidate.row_count != config.quality.expected_rows:
+    if (
+        config.quality.expected_rows is not None
+        and candidate.row_count != config.quality.expected_rows
+    ):
         raise BronzeIngestionError(
             "Source row count does not match configuration: "
             f"expected {config.quality.expected_rows}, found {candidate.row_count}"

@@ -39,7 +39,7 @@ class HdfsConfig:
 
 @dataclass(frozen=True)
 class QualityConfig:
-    expected_rows: int
+    expected_rows: int | None
     expected_source_columns: int
     delay_threshold_minutes: int
 

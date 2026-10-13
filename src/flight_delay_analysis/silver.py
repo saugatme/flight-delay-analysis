@@ -256,7 +256,10 @@ def collect_quality_metrics(
     accepted_rows = classified.accepted.count()
     rejected_rows = classified.rejected.count()
 
-    if input_rows != config.quality.expected_rows:
+    if (
+        config.quality.expected_rows is not None
+        and input_rows != config.quality.expected_rows
+    ):
         raise SilverPipelineError(
             f"Expected {config.quality.expected_rows} input rows, found {input_rows}"
         )
