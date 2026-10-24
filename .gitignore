@@ -29,3 +29,6 @@ AGENTS.md
 HANDOVER.md
 docs/flight-delay-analysis-report.docx
 src/flight_delay_analysis/analyze_carrier_delays.py
+
+# Tests remain local and are not part of the GitHub submission.
+/tests/
