@@ -7,7 +7,7 @@ Use this guide from the WSL terminal. Run commands from the project root unless 
 Start HDFS:
 
 ```bash
-export HADOOP_HOME=/home/saugat/opt/hadoop-3.5.0
+export HADOOP_HOME=~/opt/hadoop-3.5.0
 export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 export PATH=$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$HOME/.local/bin:$PATH
 

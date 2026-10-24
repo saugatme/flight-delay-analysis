@@ -14,7 +14,7 @@ Windows
      -> Ubuntu 24.04
         -> Python and PySpark
         -> Hadoop HDFS
-        -> MongoDB, when installed
+        -> MongoDB
         -> project repository
 ```
 
@@ -232,11 +232,11 @@ cd ~/projects/flight-delay-analysis
 uv sync --all-groups
 ```
 
-Run the quality checks:
+Run Ruff and the Spark startup check from the project root; see [the operations guide](operations.md) for commands.
 
 ```bash
 uv run ruff check .
-uv run pytest
+uv run flight-delay-spark-check
 ```
 
 Run or safely rerun Bronze ingestion:
@@ -289,9 +289,9 @@ stop-dfs.sh
 
 The services are for local development. Do not expose ports 9000, 9870, or 27017 to a public network. This setup does not use Kerberos and is not a production security configuration.
 
-## 12. MongoDB status
+## MongoDB
 
-MongoDB is required by the project proposal, but its WSL installation is not complete at this checkpoint. Follow the project checklist before dashboard work begins. Do not place database credentials in YAML or Git.
+MongoDB is used as the serving layer for dashboard results. Start and stop the local service by following the operations guide. Keep connection strings in the ignored .env file; do not put credentials in YAML or Git.
 
 ## Common problems
 

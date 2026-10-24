@@ -37,7 +37,7 @@ Recorded source facts:
 
 OpenFlights describes `airports.dat` as its high-quality, airport-only export. The alternative `airports-extended.dat` also contains train stations, ferry terminals, and user contributions. Those additional record types do not fit the flight-airport coordinate join.
 
-The GitHub file is a static snapshot that OpenFlights updates only sometimes. The pipeline will therefore preserve the downloaded bytes and record a retrieval timestamp and SHA-256 checksum. A checksum identifies the exact snapshot even when the source URL stays the same.
+The source is a static snapshot and may change over time. The pipeline therefore preserves the downloaded bytes and record a retrieval timestamp and SHA-256 checksum. A checksum identifies the exact snapshot even when the source URL stays the same.
 
 ### Format
 

@@ -32,3 +32,9 @@ src/flight_delay_analysis/analyze_carrier_delays.py
 
 # Tests remain local and are not part of the GitHub submission.
 /tests/
+
+# Local planning notes and session records are not published.
+/docs/checkpoint-checklist.md
+/docs/hdfs-pipeline-checkpoint.tex
+/docs/process-log.md
+/docs/project-plan.md

@@ -69,7 +69,7 @@ The OpenFlights airport source and its license are described in [docs/data-sourc
 config/                              Pipeline settings
 data/raw/                            Downloaded BTS source files (not in Git)
 data/processed/                      Local development data (not in Git)
-docs/                                Operations, data sources, plans, and reports
+docs/                                Operations and data-source guides
 scripts/                             Local MongoDB helper scripts
 src/flight_delay_analysis/
   pipelines/                         Commands for each pipeline stage
@@ -83,5 +83,3 @@ src/flight_delay_analysis/
 ## Current data checkpoint
 
 January 2025 is the verified BTS source partition. It contains 539,747 records and 110 source columns. January 2024 is also loaded for the like-month comparison. Add more months using the steps in [the operations guide](docs/operations.md).
-
-The complete run history is in [docs/process-log.md](docs/process-log.md). See [docs/checkpoint-checklist.md](docs/checkpoint-checklist.md) for assignment milestones.
