@@ -1,13 +1,27 @@
-"""Shared command-line overrides for monthly pipeline runs."""
+"""Shared Spark and command-line helpers for the pipeline."""
 
 import argparse
 from dataclasses import replace
 
+from pyspark.sql import SparkSession
+
 from flight_delay_analysis.config import PipelineConfig, RunConfig
 
 
+def create_spark_session() -> SparkSession:
+    """Create the local Spark session used by pipeline commands."""
+    spark = (
+        SparkSession.builder.master("local[*]")
+        .appName("flight-delay-analysis")
+        .config("spark.ui.showConsoleProgress", "false")
+        .getOrCreate()
+    )
+    spark.sparkContext.setLogLevel("ERROR")
+    return spark
+
+
 def add_run_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add optional year, month, and row-count overrides."""
+    """Add optional year, month, and row-count command-line options."""
     parser.add_argument("--year", type=int, help="Source and output year.")
     parser.add_argument("--month", type=int, help="Source and output month.")
     parser.add_argument(
@@ -21,7 +35,7 @@ def apply_run_arguments(
     config: PipelineConfig,
     args: argparse.Namespace,
 ) -> PipelineConfig:
-    """Return a validated config for one requested monthly partition."""
+    """Return a validated configuration for the requested month."""
     year = args.year if args.year is not None else config.run.year
     month = args.month if args.month is not None else config.run.month
     if year <= 0:

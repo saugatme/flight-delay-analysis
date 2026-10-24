@@ -11,9 +11,9 @@ from flight_delay_analysis.airport_reference import (
     load_reference_manifest,
     validate_airport_silver_readback,
 )
-from flight_delay_analysis.build_parquet import create_spark_session
 from flight_delay_analysis.config import load_pipeline_config
 from flight_delay_analysis.hdfs import HdfsClient
+from flight_delay_analysis.utilities import create_spark_session
 
 
 def parse_args() -> argparse.Namespace:

@@ -8,7 +8,6 @@ from flight_delay_analysis.airport_reference import (
     completed_airport_silver_run,
     load_reference_manifest,
 )
-from flight_delay_analysis.build_parquet import create_spark_session
 from flight_delay_analysis.config import load_pipeline_config
 from flight_delay_analysis.enrichment import (
     EnrichmentError,
@@ -20,11 +19,15 @@ from flight_delay_analysis.enrichment import (
     write_enrichment_outputs,
 )
 from flight_delay_analysis.hdfs import HdfsClient
-from flight_delay_analysis.run_options import add_run_arguments, apply_run_arguments
 from flight_delay_analysis.silver import (
     completed_silver_run,
     load_bronze_manifest,
     silver_partition_uri,
+)
+from flight_delay_analysis.utilities import (
+    add_run_arguments,
+    apply_run_arguments,
+    create_spark_session,
 )
 
 

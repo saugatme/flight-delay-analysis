@@ -3,10 +3,8 @@
 import argparse
 from pathlib import Path
 
-from flight_delay_analysis.build_parquet import create_spark_session
 from flight_delay_analysis.config import load_pipeline_config
 from flight_delay_analysis.hdfs import HdfsClient
-from flight_delay_analysis.run_options import add_run_arguments, apply_run_arguments
 from flight_delay_analysis.silver import (
     SilverWriteResult,
     classify_flights,
@@ -17,6 +15,11 @@ from flight_delay_analysis.silver import (
     read_bronze_csv,
     validate_source_contract,
     write_silver_outputs,
+)
+from flight_delay_analysis.utilities import (
+    add_run_arguments,
+    apply_run_arguments,
+    create_spark_session,
 )
 
 

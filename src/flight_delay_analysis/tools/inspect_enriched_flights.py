@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 
 from flight_delay_analysis.airport_reference import load_reference_manifest
-from flight_delay_analysis.build_parquet import create_spark_session
 from flight_delay_analysis.config import load_pipeline_config
 from flight_delay_analysis.enrichment import (
     EnrichmentError,
@@ -14,6 +13,7 @@ from flight_delay_analysis.enrichment import (
 )
 from flight_delay_analysis.hdfs import HdfsClient
 from flight_delay_analysis.silver import load_bronze_manifest
+from flight_delay_analysis.utilities import create_spark_session
 
 
 def parse_args() -> argparse.Namespace:

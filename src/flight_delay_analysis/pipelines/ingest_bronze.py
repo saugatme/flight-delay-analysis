@@ -6,7 +6,7 @@ from pathlib import Path
 from flight_delay_analysis.bronze import ingest_bronze, manifest_to_json
 from flight_delay_analysis.config import load_pipeline_config
 from flight_delay_analysis.hdfs import HdfsClient
-from flight_delay_analysis.run_options import add_run_arguments, apply_run_arguments
+from flight_delay_analysis.utilities import add_run_arguments, apply_run_arguments
 
 
 def parse_args() -> argparse.Namespace:
