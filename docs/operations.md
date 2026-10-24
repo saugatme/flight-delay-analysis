@@ -1,107 +1,114 @@
-# Operations guide
+# Run the pipeline
 
-This guide runs the pipeline in WSL. Run each command from the project root unless the step says otherwise.
+Use this guide from the WSL terminal. Run commands from the project root unless a step says otherwise.
 
-## 1. Start the storage services
+## 1. Start the services
 
-Do not format the NameNode again.
+Start HDFS:
 
 ```bash
 export HADOOP_HOME=/home/saugat/opt/hadoop-3.5.0
-export HADOOP_CONF_DIR=/home/saugat/opt/hadoop-3.5.0/etc/hadoop
-export PATH=/home/saugat/opt/hadoop-3.5.0/bin:/home/saugat/opt/hadoop-3.5.0/sbin:/home/saugat/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+export PATH=$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$HOME/.local/bin:$PATH
 
 start-dfs.sh
 jps
 hdfs dfsadmin -report
 ```
 
-Expected result: one live DataNode and no missing blocks.
+Confirm that one DataNode is live. Do not format the NameNode again.
 
-Start MongoDB:
+Start MongoDB and load the local environment:
 
 ```bash
 cd ~/projects/flight-delay-analysis
 ./scripts/start_local_mongodb.sh
-```
-
-The script starts the local authenticated server on `127.0.0.1:27017`.
-
-## 2. Load the project environment
-
-```bash
-cd ~/projects/flight-delay-analysis
 uv sync --all-groups
+
 set -a
 source .env
 set +a
 ```
 
-The ignored `.env` file holds the MongoDB connection strings. Do not print or commit it.
+The ignored `.env` file contains MongoDB connection strings. Do not print or commit it.
 
-## 3. Run the quality checks
+## 2. Add a BTS month
+
+Create one folder per month under `data/raw`. Each folder must contain exactly one CSV.
+
+For example, download February 2025 from the [BTS archive](https://transtats.bts.gov/PREZIP/):
 
 ```bash
-uv run ruff check .
-uv run pytest -q
-uv run flight-delay-spark-check
+year=2025
+month=2
+month_label=$(printf '%02d' "$month")
+target_dir="data/raw/$year-$month_label"
+archive="$target_dir/bts_ontime_${year}_${month_label}.zip"
+
+mkdir -p "$target_dir"
+curl --fail --location --retry 3 \
+  "https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_1987_present_${year}_${month}.zip" \
+  --output "$archive"
+unzip -o "$archive" -d "$target_dir"
+find "$target_dir" -maxdepth 1 -type f -name '*.csv' -print
 ```
 
-The verified checkpoint has 115 passing tests. The Spark check reports `spark-startup` as `true`.
+Check that the folder contains one CSV. Keep the CSV filename from the archive. The pipeline finds it from the configured `*.csv` pattern.
 
-## 4. Run one monthly partition
+For March or April, change `month=2` to `month=3` or `month=4`. The archive uses an unpadded month number in its URL. The local folder uses a two-digit month, such as `2025-02`.
 
-The default partition comes from `config/pipeline.yml`.
+## 3. Process one month
+
+Run each stage for the same year and month. Example: February 2025.
 
 ```bash
 uv run flight-delay-ingest-bronze \
-  --config config/pipeline.yml \
-  --project-root .
+  --config config/pipeline.yml --project-root . --year 2025 --month 2
 
 uv run flight-delay-build-silver \
-  --config config/pipeline.yml
+  --config config/pipeline.yml --year 2025 --month 2
 
 uv run flight-delay-build-enriched \
-  --config config/pipeline.yml
+  --config config/pipeline.yml --year 2025 --month 2
 
 uv run flight-delay-build-carrier-gold \
-  --config config/pipeline.yml
+  --config config/pipeline.yml --year 2025 --month 2
 
 uv run flight-delay-build-analytics-gold \
-  --config config/pipeline.yml
+  --config config/pipeline.yml --year 2025 --month 2
 
 uv run flight-delay-load-mongodb \
-  --config config/pipeline.yml
+  --config config/pipeline.yml --year 2025 --month 2
 ```
 
-The steps are safe to rerun with the same source checksums. A completed HDFS step reports an `already_*` status. MongoDB uses deterministic document IDs and replaces the same reporting partition.
+The Bronze manifest records the source row count when you do not provide `--expected-rows`. A completed HDFS stage can be rerun safely with the same source. MongoDB replaces records for the same month.
 
-## 5. Run another month or year
+## 4. Process February through April 2025
 
-Place exactly one source CSV in `data/raw/YYYY-MM/`. Then pass the period to every monthly command.
+After all three CSV files are in their matching folders, this loop processes one month at a time. It stops if a command fails.
 
 ```bash
-uv run flight-delay-ingest-bronze \
-  --config config/pipeline.yml \
-  --project-root . \
-  --year 2024 \
-  --month 1
+for month in {2..4}; do
+  echo "Processing 2025 month $month"
+
+  uv run flight-delay-ingest-bronze \
+    --config config/pipeline.yml --project-root . --year 2025 --month "$month" &&
+  uv run flight-delay-build-silver \
+    --config config/pipeline.yml --year 2025 --month "$month" &&
+  uv run flight-delay-build-enriched \
+    --config config/pipeline.yml --year 2025 --month "$month" &&
+  uv run flight-delay-build-carrier-gold \
+    --config config/pipeline.yml --year 2025 --month "$month" &&
+  uv run flight-delay-build-analytics-gold \
+    --config config/pipeline.yml --year 2025 --month "$month" &&
+  uv run flight-delay-load-mongodb \
+    --config config/pipeline.yml --year 2025 --month "$month" || break
+done
 ```
 
-Use the same `--year 2024 --month 1` options for the Silver, enrichment, Gold, and MongoDB load commands. Add `--expected-rows NUMBER` when an independent source record count is available. If no count is supplied for a non-default period, the Bronze manifest becomes the authoritative monthly count.
+For a different period, change the year or month range. Each month needs a CSV in `data/raw/YYYY-MM/`.
 
-The OpenFlights reference is shared by all periods. Build it only when the reference source changes:
-
-```bash
-uv run flight-delay-ingest-reference \
-  --config config/pipeline.yml \
-  --project-root .
-
-uv run flight-delay-build-airports \
-  --config config/pipeline.yml
-```
-
-## 6. Run the dashboard
+## 5. Open the dashboard
 
 ```bash
 uv run flight-delay-dashboard \
@@ -110,29 +117,28 @@ uv run flight-delay-dashboard \
   --port 8050
 ```
 
-Open `http://127.0.0.1:8050` in a browser. Stop the dashboard with `Ctrl+C`.
+Open [http://127.0.0.1:8050](http://127.0.0.1:8050). Select year 2025 and `Whole year / all loaded months`. The coverage notice shows which months are included. January through April should show four of twelve months after all four partitions are loaded.
 
-## 7. Verify stored results
+The whole-year rates are calculated from flight counts. They are not simple averages of monthly rates.
+
+## 6. Check results
+
+Run the code and Spark checks:
+
+```bash
+uv run ruff check .
+uv run flight-delay-spark-check
+```
+
+Check HDFS blocks:
 
 ```bash
 hdfs fsck /flight-delay/gold -files -blocks
 ```
 
-Expected result: `HEALTHY` with no missing or corrupt blocks.
-
-Verify MongoDB access without printing credentials:
-
-```bash
-uv run python -c 'import os; from pymongo import MongoClient; client = MongoClient(os.environ["MONGODB_URI"]); print(client.admin.command("ping")); client.close()'
-```
-
-Expected result: `{'ok': 1.0}`.
-
-## 8. Stop local services
+Stop the dashboard with `Ctrl+C`. Stop the local services when finished:
 
 ```bash
 ./scripts/stop_local_mongodb.sh
 stop-dfs.sh
 ```
-
-Stop the services only after Spark and Dash have stopped.
