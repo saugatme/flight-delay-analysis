@@ -1,100 +1,37 @@
-# Windows and WSL Setup Guide
+# Local environment setup
 
-## Purpose
+The project is developed on Ubuntu under WSL 2. Spark uses local execution, and HDFS runs in pseudo-distributed mode. The instructions below assume an x86-64 Ubuntu environment.
 
-This guide is for a person who uses Windows and wants to run this project without Docker.
+## Requirements
 
-Run Hadoop, Spark, Python, and MongoDB inside WSL. Do not mix Windows Hadoop scripts with Linux Hadoop scripts. Use Windows only for the desktop, browser, editor, and WSL host.
+- Python 3.12 and uv
+- Java 17
+- Apache Hadoop 3.5.0
+- MongoDB 8.0.28 binaries, or a compatible local MongoDB installation
+- Git, curl, unzip and OpenSSH
 
-## Architecture on Windows
+On Windows, install Ubuntu with `wsl --install -d Ubuntu` from an administrator PowerShell session. Run the remaining commands in Ubuntu. A Linux filesystem location is recommended for the repository and service data.
 
-```text
-Windows
-  -> WSL 2
-     -> Ubuntu 24.04
-        -> Python and PySpark
-        -> Hadoop HDFS
-        -> MongoDB
-        -> project repository
-```
-
-The current HDFS setup is pseudo-distributed. The NameNode, DataNode, and SecondaryNameNode are separate Java processes on one computer.
-
-## 1. Install WSL and Ubuntu
-
-Open PowerShell as Administrator:
-
-```powershell
-wsl --install -d Ubuntu
-```
-
-Restart Windows if Windows requests it. Open Ubuntu and create the Linux user account.
-
-Check the distribution:
-
-```bash
-lsb_release -ds
-uname -m
-```
-
-This project was tested with Ubuntu 24.04.4 LTS on `x86_64`.
-
-## 2. Keep the repository in WSL
-
-Use a Linux path such as:
-
-```text
-/home/YOUR_USER/projects/flight-delay-analysis
-```
-
-Do not keep the active repository under `/mnt/c`, OneDrive, or another Windows-mounted directory. Linux permissions, shell scripts, Spark temporary files, and HDFS storage work more reliably in the WSL filesystem.
-
-Open the WSL repository from VS Code with the WSL extension. A normal Windows VS Code window and a WSL VS Code window are not the same runtime.
-
-## 3. Install base tools
-
-In Ubuntu:
+## Python and Java
 
 ```bash
 sudo apt update
-sudo apt install --yes git gh openjdk-17-jdk curl unzip openssh-server
-```
-
-Install uv:
-
-```bash
+sudo apt install --yes git openjdk-17-jdk curl unzip openssh-server
 curl -LsSf https://astral.sh/uv/install.sh | sh
-exec "$SHELL"
 ```
 
-Clone and prepare the project:
+Open a new shell, clone the repository and install dependencies:
 
 ```bash
-mkdir -p ~/projects
-cd ~/projects
 git clone https://github.com/saugatme/flight-delay-analysis.git
 cd flight-delay-analysis
 uv python install 3.12
 uv sync --all-groups
 ```
 
-## 4. Install Hadoop inside WSL
+## Hadoop
 
-Do not use a Hadoop installation from `C:\hadoop` or `/mnt/c/hadoop`. Windows copies can contain CRLF line endings. WSL then reports errors such as:
-
-```text
-/usr/bin/env: 'bash\r': No such file or directory
-```
-
-Download the Linux Hadoop 3.5.0 archive from Apache. Verify its published SHA-512 checksum before extraction.
-
-Install it under:
-
-```text
-~/opt/hadoop-3.5.0
-```
-
-Add these values once to `~/.bashrc`:
+Install the Linux Hadoop 3.5.0 distribution under `~/opt/hadoop-3.5.0`. Set the following in your shell configuration:
 
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
@@ -103,21 +40,7 @@ export HADOOP_CONF_DIR="$HADOOP_HOME/etc/hadoop"
 export PATH="$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$PATH"
 ```
 
-Reload and verify:
-
-```bash
-source ~/.bashrc
-command -v hdfs
-hdfs version
-```
-
-The `hdfs` path must point into `/home/YOUR_USER/opt/hadoop-3.5.0/`, not `/mnt/c/hadoop/`.
-
-## 5. Configure pseudo-distributed HDFS
-
-Set `JAVA_HOME` in `$HADOOP_CONF_DIR/hadoop-env.sh`.
-
-Set `fs.defaultFS` in `core-site.xml`:
+Set `JAVA_HOME` in Hadoop's `hadoop-env.sh` as well. In `core-site.xml`, configure:
 
 ```xml
 <configuration>
@@ -128,7 +51,7 @@ Set `fs.defaultFS` in `core-site.xml`:
 </configuration>
 ```
 
-Set storage and replication in `hdfs-site.xml`. Replace `YOUR_USER`:
+In `hdfs-site.xml`, configure single-node replication and persistent storage. Replace `YOUR_USER` with your Linux username:
 
 ```xml
 <configuration>
@@ -147,17 +70,13 @@ Set storage and replication in `hdfs-site.xml`. Replace `YOUR_USER`:
 </configuration>
 ```
 
-Keep only one XML declaration and one `configuration` root in each file.
-
-## 6. Configure localhost SSH
-
-Start SSH:
+Hadoop's startup scripts require passwordless localhost SSH. Start the SSH service and authorise an existing public key, or create a dedicated key if none exists:
 
 ```bash
 sudo systemctl enable --now ssh
 ```
 
-If no SSH key exists, create one:
+For a new SSH key:
 
 ```bash
 ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
@@ -167,178 +86,59 @@ chmod 600 ~/.ssh/authorized_keys
 ssh -o StrictHostKeyChecking=accept-new localhost true
 ```
 
-The last command must not request a password.
-
-## 7. Format HDFS once
-
-Create new empty storage directories. Replace `YOUR_USER` if required:
+Initialise a **new, empty HDFS installation** once:
 
 ```bash
-mkdir -p ~/hadoop-data/namenode
-mkdir -p ~/hadoop-data/datanode
-```
-
-Format a new NameNode only once:
-
-```bash
+mkdir -p ~/hadoop-data/namenode ~/hadoop-data/datanode
 hdfs namenode -format
-```
-
-Warning: do not repeat the format command after HDFS contains data. A format creates a new filesystem namespace.
-
-## 8. Start and check HDFS
-
-```bash
 start-dfs.sh
-jps
 hdfs dfsadmin -report
 ```
 
-Expected Java processes:
-
-- NameNode.
-- DataNode.
-- SecondaryNameNode.
-- Jps.
-
-The HDFS report must show one live DataNode and zero missing or corrupt blocks.
-
-Create the project directories:
-
-```bash
-hdfs dfs -mkdir -p /flight-delay/bronze/bts/year=2025/month=01
-hdfs dfs -mkdir -p /flight-delay/silver/flights
-hdfs dfs -mkdir -p /flight-delay/gold
-hdfs dfs -ls -R /flight-delay
-```
-
-## 9. Use the correct ports
-
-- Use `hdfs://localhost:9000` in Spark and HDFS clients.
-- Open `http://localhost:9870` in a browser for the NameNode interface.
-
-Do not open port 9000 in a browser. It is a Hadoop IPC port, not an HTTP port.
-
-## 10. Start and stop a work session
-
-Start:
-
-```bash
-source ~/.bashrc
-start-dfs.sh
-jps
-hdfs dfsadmin -report
-cd ~/projects/flight-delay-analysis
-uv sync --all-groups
-```
-
-Run Ruff and the Spark startup check from the project root; see [the operations guide](operations.md) for commands.
-
-```bash
-uv run ruff check .
-uv run flight-delay-spark-check
-```
-
-Run or safely rerun Bronze ingestion:
-
-```bash
-uv run flight-delay-ingest-bronze \
-  --config config/pipeline.yml \
-  --project-root .
-```
-
-The command reads the configured local landing path. It does not contain a fixed monthly filename. The first run uploads the unchanged source and its manifest. A later run with the same file reports `already_ingested`. A conflicting file stops the command.
-
-Inspect the Bronze partition:
-
-```bash
-hdfs dfs -ls -h /flight-delay/bronze/bts/year=2025/month=01
-hdfs dfs -cat /flight-delay/bronze/bts/year=2025/month=01/_ingestion_manifest.json
-```
-
-Build or safely rerun the Silver partition:
-
-```bash
-uv run flight-delay-build-silver \
-  --config config/pipeline.yml
-```
-
-The first completed run reports `written`. A later run for the same Bronze checksum reports `already_written`. The command creates:
-
-```text
-/flight-delay/silver/flights/year=2025/month=01
-/flight-delay/silver/rejected_flights/year=2025/month=01
-/flight-delay/silver/quality_metrics/year=2025/month=01/quality_metrics.json
-```
-
-Check the stored quality evidence:
-
-```bash
-hdfs dfs -cat \
-  /flight-delay/silver/quality_metrics/year=2025/month=01/quality_metrics.json
-hdfs fsck /flight-delay/silver -files -blocks
-```
-
-Stop HDFS when required:
-
-```bash
-stop-dfs.sh
-```
-
-## 11. Windows firewall and access
-
-The services are for local development. Do not expose ports 9000, 9870, or 27017 to a public network. This setup does not use Kerberos and is not a production security configuration.
+Formatting creates a filesystem namespace and is not part of routine startup. An existing installation should be started without reformatting. The report should show one live DataNode. Pipeline commands create their own output directories.
 
 ## MongoDB
 
-MongoDB is used as the serving layer for dashboard results. Start and stop the local service by following the operations guide. Keep connection strings in the ignored .env file; do not put credentials in YAML or Git.
+Install MongoDB binaries under `~/opt/mongodb-8.0.28`, or set `MONGODB_HOME` to your installation directory. The helper scripts use a dedicated local data directory and bind to `127.0.0.1:27017`.
 
-## Common problems
+For a fresh database with no existing users or `.env` file, initialise credentials from the repository root:
 
-### `bash\r` in an error
+```bash
+./scripts/start_local_mongodb.sh --no-auth
+uv run python scripts/configure_mongodb_users.py
+./scripts/stop_local_mongodb.sh
+./scripts/start_local_mongodb.sh
+```
 
-Cause: WSL used a Windows shell script with CRLF line endings.
+The configuration script creates database users and saves generated connection strings in the ignored `.env` file. The application account has read/write access to the project database. Subsequent sessions use authenticated startup and the existing environment file; user creation is a one-time operation.
 
-Action: confirm that `command -v hdfs` points to the Linux Hadoop installation under `/home`.
+## Verify and run
 
-### `JAVA_HOME is not set`
+```bash
+uv run flight-delay-spark-check
+hdfs dfsadmin -report
+```
 
-Cause: Hadoop cannot locate the Java installation.
+Continue with the [operations guide](operations.md) to prepare reference data, process a reporting month and start the dashboard.
 
-Action: set `JAVA_HOME` in both `~/.bashrc` and `hadoop-env.sh`.
+## Service endpoints
 
-### `Connection refused` for SSH
+| Service | Local endpoint |
+| --- | --- |
+| HDFS client | `hdfs://localhost:9000` |
+| NameNode web interface | `http://localhost:9870` |
+| MongoDB | `127.0.0.1:27017` |
+| Dashboard | `http://127.0.0.1:8050` |
 
-Cause: the OpenSSH server is not installed or active.
+This is a local development configuration. HDFS is not configured with Kerberos, and these services should remain on the local network interface.
 
-Action: install `openssh-server` and start the `ssh` service.
+## Troubleshooting
 
-### XML parser error
-
-Cause: a Hadoop XML file has two XML declarations, two root elements, or a missing root tag.
-
-Action: check the file with line numbers. Keep one XML declaration and one `configuration` root.
-
-### Browser reports an HTTP request to an IPC port
-
-Cause: the browser opened port 9000.
-
-Action: use port 9870 for the NameNode web interface.
-
-### HDFS reports `Connection refused` on port 9000
-
-Cause: the NameNode is not running or did not start correctly.
-
-Action: run `start-dfs.sh`, check `jps`, and run `hdfs dfsadmin -report`. Do not format the NameNode again.
-
-### HDFS `-ls` rejects `-la`
-
-Cause: HDFS shell options are not identical to Linux `ls` options.
-
-Action: use `hdfs dfs -ls -h PATH`. HDFS already prints a detailed listing.
-
-### Silver says that the quality file exists but data is missing
-
-Cause: a Silver data directory was removed after the completed quality record was written.
-
-Action: inspect all three configured Silver paths. Do not manually invent a replacement quality record. Restore or rebuild the exact monthly partition from Bronze after the inconsistency is understood.
+| Symptom | Check |
+| --- | --- |
+| Hadoop cannot find Java | Set `JAVA_HOME` in the shell and `hadoop-env.sh`. |
+| Hadoop startup cannot connect over SSH | Confirm the SSH service is active and `ssh localhost true` succeeds without a password. |
+| HDFS connection refused | Check `jps`, the Hadoop logs and whether the NameNode is running. |
+| Hadoop reports an XML error | Each configuration file needs one `configuration` root with valid property elements. |
+| MongoDB cannot start | Inspect the log in `~/.local/state/flight-delay-mongodb/` and check whether port 27017 is already in use. |
+| MongoDB authentication fails | Confirm `.env` is loaded and its credentials match the configured database users. |

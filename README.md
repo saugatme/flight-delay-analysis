@@ -1,85 +1,98 @@
 # US Flight Delay Analysis
 
-This project studies delays, cancellations, and airport connections in U.S. domestic flights. It was built for the ID2221 assignment.
+A batch data pipeline for exploring delays, cancellations and airport connectivity in US domestic flights. It turns monthly BTS flight records into validated datasets and queryable summaries using HDFS, PySpark and MongoDB, with a Plotly Dash dashboard for exploration.
 
-The pipeline uses BTS monthly flight data, PySpark, HDFS, MongoDB, and Plotly Dash. Development runs in WSL 2 with local Spark. HDFS is configured in pseudo-distributed mode on one computer.
-
-## What the project does
-
-- Checks and stores each source file in HDFS Bronze.
-- Validates flight rows and writes accepted and rejected records to HDFS Silver.
-- Adds airport names and coordinates from the OpenFlights reference.
-- Builds carrier, month, season, airport, route, cancellation, connectivity, and score tables in HDFS Gold.
-- Loads Gold tables into MongoDB.
-- Displays the results in a Plotly Dash dashboard.
-
-## Data flow
+## Architecture
 
 ```text
-BTS monthly CSV
-  -> HDFS Bronze
-  -> validated and enriched Parquet in HDFS Silver
-  -> monthly Gold tables in HDFS
-  -> MongoDB
-  -> Plotly Dash
+BTS flight records + OpenFlights airports
+                  ↓
+           HDFS Bronze sources
+                  ↓
+      PySpark validation and enrichment
+                  ↓
+          HDFS Silver Parquet
+                  ↓
+           HDFS Gold summaries
+                  ↓
+               MongoDB
+                  ↓
+           Plotly Dash dashboard
 ```
 
-The pipeline processes one year-month partition at a time. Raw data and generated results are excluded from Git.
+- **Bronze** preserves source files and ingestion metadata.
+- **Silver** contains typed flight records, rejected records with reasons, and airport enrichment.
+- **Gold** contains summaries by carrier, period, airport and route, along with cancellation, connectivity and score tables.
+- **MongoDB** serves the prepared summaries without running Spark jobs for dashboard requests.
 
-## Measures and definitions
+The pipeline processes one month at a time. Source identifiers and quality records link outputs to their inputs and support repeatable runs.
 
-The analysis includes carrier and route performance, monthly and seasonal trends, airport and route traffic, cancellations, airport connectivity, and route and airport scores.
+## Dashboard
 
-The project uses these definitions:
+Explore flight volume, carrier reliability, cancellation reasons, airport performance and busy routes. Filters cover year, reporting period, season, carrier, airport and route.
 
-- A delayed arrival is an arrival delay of at least 15 minutes.
-- Arrival delay rate = delayed flights / flights with a valid arrival result.
-- Cancellation rate = cancelled flights / scheduled flights.
-- Average arrival delay uses non-cancelled flights with a valid arrival delay.
-- Missing arrival delay is not treated as zero. Cancelled flights are not treated as on time.
+The coverage notice identifies the loaded months. The whole-year view combines available months and does not imply that a complete year is present. Cross-year comparisons are most meaningful when the same months are loaded.
 
-## Verified comparison
+## Getting started
 
-The verified results compare January 2024 with January 2025. In January 2025, 18.79% of valid arrivals were delayed and 3.02% of scheduled flights were cancelled. In January 2024, the corresponding rates were 24.06% and 3.73%.
+The development environment uses Ubuntu on WSL 2, Python 3.12, Java 17, Hadoop HDFS and MongoDB. Python dependencies are managed with uv.
 
-These are January-to-January results. They do not describe full-year performance. The dashboard reports how many months are loaded for each year.
+```bash
+git clone https://github.com/saugatme/flight-delay-analysis.git
+cd flight-delay-analysis
+uv sync --all-groups
+```
 
-## Requirements
+1. Configure the local services using the [setup guide](docs/windows-wsl-setup.md).
+2. Download a monthly BTS CSV and run the stages in the [operations guide](docs/operations.md).
+3. Start the dashboard:
 
-The project is designed for:
+```bash
+uv run flight-delay-dashboard --config config/pipeline.yml --host 127.0.0.1 --port 8050
+```
 
-- WSL 2 with Ubuntu
-- Python 3.12 managed by uv
-- Java 17
-- Apache Hadoop 3.5.0
-- PySpark 4.2.0 in local mode
-- MongoDB
+Open [localhost:8050](http://127.0.0.1:8050).
 
-Keep the repository in the WSL Linux filesystem, for example `~/projects/flight-delay-analysis`. Do not run it from OneDrive.
+## Metric definitions
 
-## Start here
+| Measure | Definition |
+| --- | --- |
+| Arrival-delay rate | Flights delayed at least 15 minutes / non-cancelled flights with a valid arrival result |
+| Cancellation rate | Cancelled flights / scheduled flights |
+| Completion rate | Operated flights / scheduled flights |
+| Average arrival delay | Mean delay among non-cancelled flights with valid arrival results |
 
-See [docs/operations.md](docs/operations.md) for commands to start the services, download a BTS month, run the pipeline, and open the dashboard.
+Rates are displayed as percentages. Missing arrival delays are excluded, rather than replaced with zero. Combined-period rates use total counts, not averages of monthly percentages. Negative arrival delays represent early arrivals.
 
-The OpenFlights airport source and its license are described in [docs/data-sources.md](docs/data-sources.md). Environment setup is described in [docs/windows-wsl-setup.md](docs/windows-wsl-setup.md).
-
-## Repository layout
+## Project structure
 
 ```text
-config/                              Pipeline settings
-data/raw/                            Downloaded BTS source files (not in Git)
-data/processed/                      Local development data (not in Git)
-docs/                                Operations and data-source guides
-scripts/                             Local MongoDB helper scripts
+config/                         Shared pipeline configuration
+scripts/                        Local MongoDB service helpers
 src/flight_delay_analysis/
-  pipelines/                         Commands for each pipeline stage
-  gold/                              Gold calculations and HDFS storage
-  serving/                            MongoDB access and loading
-  dashboard/                          Dash application
-  tools/                               Inspection and Spark checks
-  utilities.py                         Shared Spark and command-line helpers
+  pipelines/                    Pipeline commands
+  gold/                         Summary calculations and storage
+  serving/                      MongoDB loading and verification
+  dashboard/                    Dash application
+  tools/                        Data inspection and runtime checks
+docs/                           Setup, operations and data sources
 ```
 
-## Current data checkpoint
+Downloaded data, generated outputs and credentials are excluded from version control.
 
-January 2025 is the verified BTS source partition. It contains 539,747 records and 110 source columns. January 2024 is also loaded for the like-month comparison. Add more months using the steps in [the operations guide](docs/operations.md).
+## Development
+
+```bash
+uv run ruff check .
+uv run flight-delay-spark-check
+```
+
+## Scope
+
+Spark runs in local mode. HDFS runs in pseudo-distributed mode with one DataNode and a replication factor of one. This configuration supports local development; it does not demonstrate multi-machine performance or fault tolerance. Pipeline stages are started manually.
+
+## Data sources
+
+Flight records are provided by the [Bureau of Transportation Statistics](https://www.transtats.bts.gov/). Airport metadata comes from [OpenFlights](https://openflights.org/data.php). See [data sources](docs/data-sources.md) for formats and attribution.
+
+Contains information from the OpenFlights Airports Database, available under the Open Database License (ODbL).
